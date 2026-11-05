@@ -177,3 +177,22 @@ html{background:#03091c}body{background-color:#03091c;background-image:radial-gr
 .assistant-bot .bot-glass .bot-face:after{content:"";position:absolute;bottom:15px;left:calc(50% - 13px);width:26px;height:8px;border-bottom:3px solid #60efff;border-radius:0 0 15px 15px;opacity:.9}
 .assistant-bot .bot-aura{z-index:0;inset:-17px;width:auto;height:auto;background:#48c9ff15;box-shadow:0 0 42px #51a9ff48}
 @media(max-width:650px){.event-bulletin-copy h3{font-size:13px}.event-bulletin-clock{min-width:0;width:100%}.assistant-copy{width:100%;max-width:480px;margin:0 auto}.assistant-messages,.idea-form{width:100%;max-width:480px}.assistant-visual{height:275px}.assistant-orbit{width:224px;height:224px}.assistant-bot{transform:scale(.9)}}
+/* Fondos de temporada para el evento existente */
+.season-feature[data-theme] {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+.season-feature[data-theme="reyes"] { background-image: linear-gradient(110deg, #07132ee8, #0a194bd9 54%, #101842b8), url("/assets/seasons/reyes.jpg"); }
+.season-feature[data-theme="hearts"] { background-image: linear-gradient(110deg, #241024e8, #35183bd9 54%, #171342b8), url("/assets/seasons/hearts.jpg"); }
+.season-feature[data-theme="spring"] { background-image: linear-gradient(110deg, #071b2de8, #102e43d9 54%, #101842b8), url("/assets/seasons/spring.jpg"); }
+.season-feature[data-theme="eggs"] { background-image: linear-gradient(110deg, #102017e8, #182a2bd9 54%, #101842b8), url("/assets/seasons/eggs.jpg"); }
+.season-feature[data-theme="family"] { background-image: linear-gradient(110deg, #07132ee8, #0a194bd9 54%, #101842b8), url("/assets/seasons/family.jpg"); }
+.season-feature[data-theme="summer"] { background-image: linear-gradient(110deg, #06213be8, #0b3262d9 54%, #101842b8), url("/assets/seasons/summer.jpg"); }
+.season-feature[data-theme="universe"] { background-image: linear-gradient(110deg, #090d24e8, #141b3fd9 54%, #101842b8), url("/assets/seasons/universe.jpg"); }
+.season-feature[data-theme="academy"] { background-image: linear-gradient(110deg, #171a34e8, #222845d9 54%, #101842b8), url("/assets/seasons/academy.jpg"); }
+.season-feature[data-theme="mexico"] { background-image: linear-gradient(110deg, #10172fe8, #182650d9 54%, #101842b8), url("/assets/seasons/mexico.jpg"); }
+.season-feature[data-theme="halloween"] { background-image: linear-gradient(110deg, #1c102be8, #301943d9 54%, #15133bb8), url("/assets/seasons/halloween.jpg"); }
+.season-feature[data-theme="muertos"] { background-image: linear-gradient(110deg, #26112de8, #3a1948d9 54%, #201342b8), url("/assets/seasons/muertos.jpg"); }
+.season-feature[data-theme="christmas"] { background-image: linear-gradient(110deg, #10182fe8, #142a4bd9 54%, #111944b8), url("/assets/seasons/christmas.jpg"); }
+.season-feature[data-theme] .season-feature-art { background: linear-gradient(140deg, #06132bb8, #0a164aa6); }
