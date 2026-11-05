@@ -37,7 +37,7 @@ echo Comprobando si FUNVERSE ya esta abierto...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:3000/'; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; exit 1"
 if not errorlevel 1 (
   echo FUNVERSE ya esta activo. Abriendo la pagina.
-  start "" "http://127.0.0.1:3000"
+  start "" "https://funverse-com.danlopez.workers.dev/"
   exit /b 0
 )
 
@@ -50,5 +50,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo FUNVERSE esta listo en http://127.0.0.1:3000
+echo FUNVERSE esta listo en https://funverse-com.danlopez.workers.dev/
 exit /b 0
