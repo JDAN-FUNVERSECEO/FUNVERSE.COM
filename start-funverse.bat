@@ -34,11 +34,19 @@ if errorlevel 1 (
 :dependencies_ready
 
 echo Comprobando si FUNVERSE ya esta abierto...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:3000/'; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; exit 1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$chatCss = $false; try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:3000/chat.css'; $chatCss = $r.StatusCode -eq 200 } catch {}; $chatApi = $false; try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:3000/api/friends'; $chatApi = $r.StatusCode -eq 200 } catch { try { $chatApi = $_.Exception.Response.StatusCode.value__ -eq 401 } catch {} }; if ($chatCss -and $chatApi) { exit 0 }; exit 1"
 if not errorlevel 1 (
   echo FUNVERSE ya esta activo. Abriendo la pagina.
-  start "" "https://funverse-com.danlopez.workers.dev/"
+  start "" "http://127.0.0.1:3000/"
   exit /b 0
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:3000/'; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; exit 1"
+if not errorlevel 1 (
+  echo El servidor de FUNVERSE sigue abierto, pero es una version anterior sin chat.
+  echo Cierra la ventana titulada FUNVERSE - servidor local y vuelve a abrir este archivo.
+  pause
+  exit /b 1
 )
 
 echo Iniciando FUNVERSE...
@@ -50,5 +58,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo FUNVERSE esta listo en https://funverse-com.danlopez.workers.dev/
+echo FUNVERSE esta listo en http://127.0.0.1:3000/
 exit /b 0
