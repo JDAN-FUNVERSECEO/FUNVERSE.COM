@@ -12,7 +12,6 @@ const eventDuration = document.querySelector('#admin-event-duration');
 const eventEffect = document.querySelector('#admin-event-effect');
 let ownerEvent = null;
 let ownerSettings = null;
-let aiConfig = null;
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { credentials: 'include', ...options });
@@ -189,48 +188,8 @@ async function loadStatus() {
   liveBadge.dataset.state = status.site === 'ok' ? 'online' : 'offline';
   document.querySelector('#admin-site-state').textContent = status.site === 'ok' ? 'EN LÍNEA' : 'DESCONECTADA';
   document.querySelector('#admin-health-dot').dataset.state = status.site === 'ok' ? 'online' : 'offline';
-  document.querySelector('#admin-web-detail').textContent = status.site === 'ok' ? 'Node · puerto 3000 · local' : 'No disponible';
-  document.querySelector('#admin-ai-state').textContent = status.modelReady ? 'LISTO' : status.assistant === 'loading' ? 'INICIANDO' : 'EN ESPERA';
-  document.querySelector('#admin-model-name').textContent = status.model || 'FUNSISTANT';
-  document.querySelector('#admin-ai-detail').textContent = status.modelReady ? `${status.model} listo` : status.detail || 'El motor se inicia cuando se usa el chat.';
-  document.querySelector('#admin-bridge-detail').textContent = status.modelReady ? '127.0.0.1:9931 · conectado' : '127.0.0.1:9931 · apagado hasta abrir el chat';
-  document.querySelector('#admin-ai-health-dot').dataset.state = status.modelReady ? 'online' : 'offline';
-}
-async function loadAiConfig() {
-  aiConfig = await requestJson('/api/admin/ai-config');
-  const profileSelect = document.querySelector('#admin-ai-profile');
-  const modelSelect = document.querySelector('#admin-ai-model-file');
-  profileSelect.value = aiConfig.profile;
-  modelSelect.replaceChildren();
-  if (!aiConfig.models.length) {
-    const option = document.createElement('option'); option.value = ''; option.textContent = 'No hay archivos GGUF en assets'; modelSelect.append(option);
-  } else {
-    aiConfig.models.forEach((model) => {
-      const option = document.createElement('option'); option.value = model.file; option.textContent = `${model.file}${model.active ? ' · activo' : ''}`; modelSelect.append(option);
-    });
-    modelSelect.value = aiConfig.modelFile;
-  }
-  document.querySelector('#admin-ai-instructions').value = aiConfig.instructions;
-  document.querySelector('#admin-ai-config-note').textContent = aiConfig.note;
-}
-async function saveAiConfig(applyModel) {
-  const button = document.querySelector(applyModel ? '#admin-ai-apply' : '#admin-ai-save');
-  const status = document.querySelector('#admin-ai-save-status');
-  button.disabled = true;
-  status.textContent = applyModel ? 'Guardando e iniciando el perfil…' : 'Guardando instrucciones…';
-  try {
-    const payload = applyModel
-      ? { profile: document.querySelector('#admin-ai-profile').value, modelFile: document.querySelector('#admin-ai-model-file').value, instructions: document.querySelector('#admin-ai-instructions').value }
-      : { profile: aiConfig.profile, modelFile: aiConfig.modelFile, instructions: document.querySelector('#admin-ai-instructions').value };
-    const result = await requestJson('/api/admin/ai-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    status.textContent = result.message;
-    await Promise.all([loadAiConfig(), loadStatus()]);
-  } catch (error) { status.textContent = error.message; status.dataset.state = 'error'; }
-  finally { button.disabled = false; }
-}
-document.querySelector('#admin-ai-save').addEventListener('click', () => saveAiConfig(false));
-document.querySelector('#admin-ai-apply').addEventListener('click', () => saveAiConfig(true));
-(async () => {
-  try { if (!await requireOwner()) return; await Promise.all([loadEventSettings(), loadSiteSettings(), loadUsers(), loadStatus(), loadAiConfig()]); }
+  document.querySelector('#admin-web-detail').textContent = status.site === 'ok' ? 'Servidor de FUNVERSE conectado.' : 'No disponible';
+}(async () => {
+  try { if (!await requireOwner()) return; await Promise.all([loadEventSettings(), loadSiteSettings(), loadUsers(), loadStatus()]); }
   catch (error) { gate.hidden = false; content.hidden = true; statusLine.textContent = 'No se pudo validar el acceso.'; gateMessage.textContent = error.message || 'Abre http://127.0.0.1:3000.'; }
 })();

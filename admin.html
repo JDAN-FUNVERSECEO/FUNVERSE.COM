@@ -46,7 +46,7 @@
           <button data-admin-jump="economy" type="button"><span>✦</span> Recompensas</button>
           <button data-admin-jump="events" type="button"><span>⚡</span> Eventos</button>
           <button data-admin-jump="settings" type="button"><span>⚙</span> Apariencia</button>
-          <button data-admin-jump="ai" type="button"><span>✧</span> FUNSISTANT</button>
+
         </nav>
         <div class="admin-sidebar-footer"><span class="admin-sidebar-pulse"></span> Esta instalación es local.<br><small>Solo OWNER puede editarla.</small></div>
       </aside>
@@ -61,20 +61,20 @@
             <article class="admin-stat-card"><span>CUENTAS REGISTRADAS</span><b id="admin-users-count">—</b><small id="admin-player-section-count">Cuentas de esta instalación</small></article>
             <article class="admin-stat-card stat-purple"><span>CUENTAS SUSPENDIDAS</span><b id="admin-banned-count">—</b><small>Solo OWNER puede moderar</small></article>
             <article class="admin-stat-card"><span>SITIO WEB</span><b id="admin-site-state">Comprobando</b><small id="admin-web-detail">Node · puerto 3000 · local</small></article>
-            <article class="admin-stat-card stat-purple"><span>FUNSISTANT</span><b id="admin-ai-state">Comprobando</b><small id="admin-model-name">FUN 2.1 UNIVERSE</small></article>
+
           </div>
           <div class="admin-overview-grid">
             <article class="admin-panel-card">
               <div class="admin-panel-title"><span>◉</span><div><h2>Estado de servicios</h2><small>Conexiones locales</small></div></div>
               <div class="admin-health-row"><span class="admin-health-icon">🌐</span><span><b>FUNVERSE</b><small id="admin-web-detail-copy">Servidor local · 127.0.0.1:3000</small></span><i class="admin-health-dot" id="admin-health-dot" data-state="offline"></i></div>
-              <div class="admin-health-row"><span class="admin-health-icon">🤖</span><span><b>FUNSISTANT</b><small id="admin-ai-detail">El motor se inicia al usar el chat para evitar congelar la página.</small></span><i class="admin-health-dot" id="admin-ai-health-dot" data-state="offline"></i></div>
-              <p class="admin-honesty-note" id="admin-bridge-detail">127.0.0.1:9931 · conexión local</p>
+
+
             </article>
             <article class="admin-panel-card admin-quick-card">
               <div class="admin-panel-title"><span>⚡</span><div><h2>Accesos rápidos</h2><small>Herramientas de OWNER</small></div></div>
               <button class="admin-quick-action" data-admin-jump="events" type="button"><span>📣</span> Lanzar anuncio o evento</button>
               <button class="admin-quick-action" data-admin-jump="players" type="button"><span>🛡️</span> Administrar cuentas</button>
-              <button class="admin-quick-action" data-admin-jump="ai" type="button"><span>🤖</span> Editar FUNSISTANT</button>
+
             </article>
             <article class="admin-panel-card admin-active-event">
               <div class="admin-panel-title"><span>✦</span><div><h2>ADMIN ABUSE</h2><small>Evento manual</small></div><span class="admin-event-badge" id="admin-event-badge" data-state="idle">EN ESPERA</span></div>
@@ -141,26 +141,7 @@
           </article>
         </section>
 
-        <section class="admin-dashboard-section admin-section" id="ai">
-          <div class="admin-section-heading"><div><span class="admin-eyebrow">ASISTENTE LOCAL</span><h2>FUNSISTANT</h2></div><a class="admin-outline-button" href="http://127.0.0.1:9931/" target="_blank" rel="noopener noreferrer">Abrir servidor local ↗</a></div>
-          <div class="admin-settings-grid">
-            <article class="admin-panel-card">
-              <div class="admin-panel-title"><span>🤖</span><div><h3>Modelo y perfil</h3><small>Los perfiles cambian instrucciones. Los pesos GGUF se administran en assets.</small></div></div>
-              <label>Perfil<select id="admin-ai-profile"><option value="fun-1.0">FUN 1.0</option><option value="fun-2.1-universe">FUN 2.1 UNIVERSE</option></select></label>
-              <label>Archivo GGUF<select id="admin-ai-model-file"></select></label>
-              <p id="admin-ai-config-note" class="admin-honesty-note">FUN 1.0 y FUN 2.1 son perfiles; para un modelo distinto hace falta otro archivo GGUF.</p>
-            </article>
-            <article class="admin-panel-card">
-              <div class="admin-panel-title"><span>✎</span><div><h3>Personalidad e instrucciones</h3><small>Se aplican a las próximas respuestas.</small></div></div>
-              <label for="admin-ai-instructions">Instrucciones de FUNSISTANT</label>
-              <textarea id="admin-ai-instructions" maxlength="24000" rows="10"></textarea>
-              <div class="admin-actions"><button class="admin-primary-button" id="admin-ai-save" type="button">Guardar instrucciones</button><button class="admin-secondary-button" id="admin-ai-apply" type="button">Guardar y cambiar modelo</button></div>
-              <p class="admin-card-status" id="admin-ai-save-status" role="status" aria-live="polite"></p>
-            </article>
-          </div>
-        </section>
-
-        <footer class="admin-section-heading"><a class="admin-back-link" href="/">← Volver a FUNVERSE</a><a class="admin-back-link" href="/chat.html">Abrir chat con FUNSISTANT →</a></footer>
+        <footer class="admin-section-heading"><a class="admin-back-link" href="/">← Volver a FUNVERSE</a></footer>
       </main>
     </div>
   </div>

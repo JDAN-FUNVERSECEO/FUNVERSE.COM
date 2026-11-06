@@ -47,7 +47,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,vi
 .game-difficulty{display:flex;align-items:center;gap:9px;margin:10px 0;color:#aaa4bd;font-size:9px}.game-difficulty select{padding:8px 10px;border:1px solid #ffffff24;border-radius:9px;background:#19172f;color:#f3edff;font-size:9px}.game-difficulty select:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
 .event-effect-confetti .event-bulletin:after{content:'✧  ✦  ✧  ✦  ✧';color:#d1ff72;opacity:.52;right:150px;top:8px;font-size:19px;letter-spacing:8px}.event-effect-rainbow .event-bulletin{background:linear-gradient(110deg,#40284b,#2e2549 40%,#1c3c48 78%,#403446);border-color:#ff9fc766}.event-effect-big-head .buddy-avatar{transform:scale(1.22)}.event-effect-spotlight .assistant-orbit{box-shadow:0 0 76px #d1ff7245,0 0 120px #b68aff35}
 
-/* FUNSISTANT: selector de modos disponible en el chat principal y en el compañero flotante. */
+
 .assistant-mode-picker,.buddy-mode-picker{display:flex;align-items:center;gap:10px;color:#bdb6d2;font-size:10px;font-weight:700}
 .assistant-mode-picker{max-width:400px;justify-content:space-between;margin:13px 0 5px}
 .assistant-mode-picker select,.buddy-mode-picker select{min-width:0;border:1px solid #ffffff27;border-radius:10px;background:#211e3b;color:#f8f5ff;padding:9px 11px;font:600 10px var(--font-body);outline:0}
@@ -196,3 +196,17 @@ html{background:#03091c}body{background-color:#03091c;background-image:radial-gr
 .season-feature[data-theme="muertos"] { background-image: linear-gradient(110deg, #26112de8, #3a1948d9 54%, #201342b8), url("/assets/seasons/muertos.jpg"); }
 .season-feature[data-theme="christmas"] { background-image: linear-gradient(110deg, #10182fe8, #142a4bd9 54%, #111944b8), url("/assets/seasons/christmas.jpg"); }
 .season-feature[data-theme] .season-feature-art { background: linear-gradient(140deg, #06132bb8, #0a164aa6); }
+/* Taller de código sin conexión */
+.coding-builder { display: grid; gap: 9px; margin: 14px 0 17px; padding: 15px; border: 1px solid #58dfff52; border-radius: 14px; background: radial-gradient(ellipse at top right,#2658a833,transparent 55%),linear-gradient(135deg,#111d42,#21163e); box-shadow: inset 0 0 24px #13d9ff0a; }
+.coding-builder h4 { margin: 5px 0 3px; color: #fff; font: 700 17px var(--font-display); }
+.coding-builder p { margin: 0; color: #bdb8d3; font-size: 10px; line-height: 1.5; }
+.coding-builder label { margin-top: 3px; color: #d6f8ff; font-size: 10px; }
+#coding-builder-status { min-height: 15px; }
+@media(max-width:900px) { .coding-lab { grid-template-columns: 150px minmax(0,1fr); } .coding-preview { grid-column: 2; } }
+/* Guía de FUN Academy: explicación legible y avance claro */
+.coding-tutor { margin-top: 16px; padding: 16px; border: 1px solid #5fdfff42; border-radius: 14px; background: linear-gradient(135deg, #101d3b, #181631); }
+.coding-tutor > div:first-child { display: grid; gap: 4px; }
+.coding-tutor p { margin: 0; color: #c9c5dc; font-size: 11px; line-height: 1.6; }
+#coding-tutor-answer { grid-column: 1 / -1; max-height: 220px; overflow: auto; padding: 14px; border: 1px solid #69dfff38; border-radius: 11px; color: #f1efff; background: #080f25; font-size: 12px; line-height: 1.8; white-space: pre-wrap; }
+#coding-progress-card { border-color: #c09aff57; background: linear-gradient(110deg, #151d47, #271644); }
+#coding-progress-card > span:last-child { min-width: 54px; padding: 8px 10px; border-radius: 12px; text-align: center; color: #fff; background: #7352c8; font-weight: 800; }

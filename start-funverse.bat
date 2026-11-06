@@ -41,7 +41,7 @@ if not errorlevel 1 (
   exit /b 0
 )
 
-echo Iniciando FUNVERSE y el puente local de FUNSISTANT...
+echo Iniciando FUNVERSE...
 start "FUNVERSE - servidor local" /D "%~dp0" cmd /k node server.js
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ready = $false; for ($i = 0; $i -lt 180; $i++) { try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:3000/'; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch {}; Start-Sleep -Milliseconds 500 }; if ($ready) { Start-Process 'http://127.0.0.1:3000'; exit 0 }; exit 1"
 if errorlevel 1 (

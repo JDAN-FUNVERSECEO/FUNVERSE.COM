@@ -200,11 +200,11 @@ const seasonEvents = [
   { name: 'Fiesta de México', theme: 'mexico', art: '🇲🇽', decor: ['🇲🇽', '🎉'], questIcon: '⭐', questTitle: 'Sigue la ruta de estrellas', questText: 'Reúne cinco estrellas con los colores de la celebración.', description: 'Celebra las historias, los colores y la cultura de México con respeto.', game: 'Jugar el reto mexicano', href: '#seasonal-quest' },
   { name: 'Halloween de nebulosa', theme: 'halloween', art: '🎃', decor: ['🎃', '👻'], questIcon: '🎃', questTitle: 'Busca calabazas y fantasmas', questText: 'Encuentra cinco calabazas en una aventura misteriosa y amistosa.', description: 'Luces moradas, calabazas brillantes y un fantasma espacial original.', game: 'Jugar el reto de Halloween', href: '#seasonal-quest' },
   { name: 'Día de Muertos', theme: 'muertos', art: '💀', decor: ['💀', '🌼'], questIcon: '🌼', questTitle: 'Enciende las flores de recuerdo', questText: 'Reúne cinco flores para iluminar el camino de la memoria.', description: 'Una temporada colorida para conocer y recordar con cariño una tradición mexicana.', game: 'Jugar el reto de recuerdo', href: '#seasonal-quest' },
-  { name: 'Navidad cósmica', theme: 'christmas', art: '🎄', decor: ['🎄', '🤖🎅'], questIcon: '🎁', questTitle: 'Ayuda al robot Santa', questText: 'Recoge cinco regalos antes de que el trineo despegue.', description: 'Un árbol galáctico y FUNSISTANT con su traje de Santa llenan la estación de luces.', game: 'Jugar el reto navideño', href: '#seasonal-quest' },
+  { name: 'Navidad cósmica', theme: 'christmas', art: '🎄', decor: ['🎄', '🤖🎅'], questIcon: '🎁', questTitle: 'Ayuda al robot Santa', questText: 'Recoge cinco regalos antes de que el trineo despegue.', description: 'Un árbol galáctico y el robot con su traje de Santa llenan la estación de luces.', game: 'Jugar el reto navideño', href: '#seasonal-quest' },
 ];;
 
 let currentSeasonMonth = 0;
-let siteSettingsState = { seasonMonth: 'auto', heroTitle: 'El universo de diversión empieza aquí.', heroTagline: 'Juega, crea y explora junto a FUNSISTANT. Tu siguiente aventura está a un clic.', parentalEnabled: false, dailyLimitMinutes: 60 };
+let siteSettingsState = { seasonMonth: 'auto', heroTitle: 'El universo de diversión empieza aquí.', heroTagline: 'Juega, crea y explora a tu manera. Tu siguiente aventura está a un clic.', parentalEnabled: false, dailyLimitMinutes: 60 };
 
 function renderSeason(month, selected = true) {
   const item = seasonEvents[month];
@@ -322,145 +322,6 @@ void refreshDanzokAnnouncement();
 window.setInterval(refreshDanzokAnnouncement, 1_000);
 
 window.setInterval(updateWeeklyEventClock, 1_000);
-
-// FUNSISTANT se queda disponible mientras recorres la página.
-const buddyToggle = document.querySelector('#buddy-toggle');
-const buddyPanel = document.querySelector('#buddy-panel');
-const buddyMessages = document.querySelector('#buddy-messages');
-const buddyForm = document.querySelector('#buddy-form');
-const buddyInput = document.querySelector('#buddy-input');
-
-buddyToggle.addEventListener('click', () => {
-  const isOpen = buddyToggle.getAttribute('aria-expanded') === 'true';
-  buddyToggle.setAttribute('aria-expanded', String(!isOpen));
-  buddyPanel.hidden = isOpen;
-});
-
-document.querySelector('#buddy-close').addEventListener('click', () => {
-  buddyToggle.setAttribute('aria-expanded', 'false');
-  buddyPanel.hidden = true;
-  buddyToggle.focus();
-});
-
-const assistantMessages = document.querySelector('#assistant-messages');
-const assistantStatus = document.querySelector('#assistant-status');
-const chatHistory = [];
-const assistantModeSelectors = [...document.querySelectorAll('[data-assistant-mode]')];
-let assistantMode = 'fun';
-let assistantBusy = false;
-let assistantNotice = '';
-
-assistantModeSelectors.forEach((selector) => {
-  selector.value = assistantMode;
-  selector.addEventListener('change', () => {
-    assistantMode = selector.value;
-    assistantModeSelectors.forEach((otherSelector) => { otherSelector.value = assistantMode; });
-  });
-});
-
-function makeBubble(role, text) {
-  const bubble = document.createElement('div');
-  bubble.className = `chat-bubble ${role === 'user' ? 'from-user' : 'from-assistant'}`;
-  bubble.textContent = text;
-  return bubble;
-}
-
-function renderAssistantChats() {
-  [assistantMessages, buddyMessages].forEach((container) => {
-    container.replaceChildren();
-    container.append(makeBubble('assistant', '¡Hola! Soy FUNSISTANT FUN 2.1 UNIVERSE. Pregúntame lo que quieras y pensemos juntos. ✨'));
-    chatHistory.slice(-12).forEach(({ role, content }) => container.append(makeBubble(role, content)));
-    if (assistantBusy) container.append(makeBubble('assistant', 'Estoy pensando…'));
-    if (assistantNotice) container.append(makeBubble('assistant', assistantNotice));
-    container.scrollTop = container.scrollHeight;
-  });
-}
-
-async function askFunsistant(rawMessage) {
-  const message = rawMessage.trim();
-  if (!message || assistantBusy) return;
-
-  assistantNotice = '';
-  chatHistory.push({ role: 'user', content: message });
-  assistantBusy = true;
-  renderAssistantChats();
-
-  try {
-    const response = await fetch(apiUrl('/api/funsistant'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: assistantMode, messages: chatHistory.slice(-12) }),
-    });
-    let data;
-    try { data = await response.json(); }
-    catch { throw new Error('El servidor respondió con un formato inesperado.'); }
-    if (!response.ok) throw new Error(data.error || 'No pude conectarme ahora. Inténtalo otra vez.');
-    if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('FUNSISTANT no recibió una respuesta. Inténtalo de nuevo.');
-    chatHistory.push({ role: 'assistant', content: data.reply.trim() });
-    if (chatHistory.length > 12) chatHistory.splice(0, chatHistory.length - 12);
-  } catch (error) {
-    assistantNotice = error instanceof TypeError
-      ? 'No pude llegar al puente de FUNSISTANT. Abre http://127.0.0.1:3000 y deja start-funverse.bat abierto.'
-      : (error.message || 'No pude conectar con el servidor de FUNVERSE.');
-  } finally {
-    assistantBusy = false;
-    renderAssistantChats();
-  }
-}
-
-ideaForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const message = ideaInput.value;
-  ideaInput.value = '';
-  askFunsistant(message);
-});
-
-buddyForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const message = buddyInput.value;
-  buddyInput.value = '';
-  askFunsistant(message);
-});
-
-document.querySelectorAll('[data-buddy-prompt]').forEach((button) => {
-  button.addEventListener('click', () => askFunsistant(button.dataset.buddyPrompt));
-});
-
-renderAssistantChats();
-
-async function updateAssistantStatus() {
-  if (!assistantStatus) return;
-  try {
-    const status = await apiJson('/api/status');
-    renderWeeklyEvent(status.weeklyEvent);
-    renderAnnouncement(status.announcement);
-    if (status.busy) {
-      assistantStatus.dataset.state = 'busy';
-      assistantStatus.textContent = `FUNSISTANT está respondiendo · ${status.model}`;
-    } else if (status.modelReady) {
-      assistantStatus.dataset.state = 'ready';
-      assistantStatus.textContent = `Conectada y lista · ${status.model}`;
-    } else {
-      assistantStatus.dataset.state = status.assistant === 'error' ? 'error' : 'checking';
-      assistantStatus.textContent = `${status.detail || 'La IA local está iniciando…'} · ${status.model}`;
-    }
-  } catch {
-    assistantStatus.dataset.state = 'error';
-    assistantStatus.textContent = 'No encuentro el servidor. Abre http://127.0.0.1:3000 y deja start-funverse.bat abierto.';
-  }
-}
-
-void updateAssistantStatus();
-window.setInterval(updateAssistantStatus, 12_000);
-
-async function updateEventStatus() {
-  try { renderWeeklyEvent((await apiJson('/api/events/status')).weeklyEvent); }
-  catch { /* El resto del sitio sigue disponible si el servidor reinicia. */ }
-}
-
-void updateEventStatus();
-window.setInterval(updateEventStatus, 3_000);
 
 // El pasaporte y las misiones viven en este navegador; no envían actividad a un servidor.
 const progressStorageKey = 'funverse-progress-v1';
@@ -836,114 +697,19 @@ if (jengaCanvas && window.Matter) {
   physicsError.hidden = false;
 }
 
-// Gato Galáctico: X juega contra FUNSISTANT, que usa minimax para elegir jugadas.
-const ticBoardElement = document.querySelector('#tic-board');
-if (ticBoardElement) {
-  const ticStatus = document.querySelector('#gato-status');
-  const ticRestart = document.querySelector('#gato-restart');
-  const ticDifficulty = document.querySelector('#gato-difficulty');
-  const winningLines = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
-  let ticCells = Array(9).fill('');
-  let ticBusy = false;
-  let ticFinished = false;
-
-  function ticWinner(cells) {
-    for (const [a, b, c] of winningLines) {
-      if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
-    }
-    return cells.every(Boolean) ? 'draw' : '';
-  }
-
-  function minimax(cells, depth, maximizing) {
-    const result = ticWinner(cells);
-    if (result === 'O') return 10 - depth;
-    if (result === 'X') return depth - 10;
-    if (result === 'draw') return 0;
-    let best = maximizing ? -Infinity : Infinity;
-    for (let index = 0; index < cells.length; index += 1) {
-      if (cells[index]) continue;
-      cells[index] = maximizing ? 'O' : 'X';
-      const score = minimax(cells, depth + 1, !maximizing);
-      cells[index] = '';
-      best = maximizing ? Math.max(best, score) : Math.min(best, score);
-    }
-    return best;
-  }
-
-  function renderTicBoard() {
-    ticBoardElement.replaceChildren();
-    ticCells.forEach((mark, index) => {
-      const cell = document.createElement('button');
-      cell.type = 'button';
-      cell.className = `tic-cell${mark ? ` mark-${mark.toLowerCase()}` : ''}`;
-      cell.textContent = mark === 'X' ? '×' : mark === 'O' ? '○' : '';
-      cell.setAttribute('aria-label', `Casilla ${index + 1}${mark ? `, ${mark === 'X' ? 'tu marca' : 'FUNSISTANT'}` : ', vacía'}`);
-      cell.disabled = Boolean(mark) || ticBusy || ticFinished;
-      cell.addEventListener('click', () => playTicMove(index));
-      ticBoardElement.append(cell);
-    });
-  }
-
-  function endTicTurn(result) {
-    const newResult = Boolean(result) && !ticFinished;
-    if (result === 'X') {
-      ticFinished = true;
-      ticStatus.textContent = '¡Ganaste esta ronda! ✨';
-    } else if (result === 'O') {
-      ticFinished = true;
-      ticStatus.textContent = 'FUNSISTANT encontró la línea. ¡Va otra!';
-    } else if (result === 'draw') {
-      ticFinished = true;
-      ticStatus.textContent = '¡Empate! Buena partida.';
-    }
-    if (newResult) {
-      advanceDailyMission('gato');
-      recordGameResult('gato', result);
-    }
-    renderTicBoard();
-    return Boolean(result);
-  }
-
-  function funsistantTicMove() {
-    const candidateMoves = [];
-    for (let index = 0; index < ticCells.length; index += 1) {
-      if (ticCells[index]) continue;
-      ticCells[index] = 'O';
-      const score = minimax(ticCells, 0, false);
-      ticCells[index] = '';
-      candidateMoves.push({ index, score });
-    }
-    const bestScore = Math.max(...candidateMoves.map((move) => move.score));
-    const bestMoves = candidateMoves.filter((move) => move.score === bestScore);
-    const difficulty = ticDifficulty.value;
-    const chanceToPlayBest = difficulty === 'experta' ? 1 : difficulty === 'relajada' ? 0.25 : 0.75;
-    const options = Math.random() < chanceToPlayBest ? bestMoves : candidateMoves;
-    const selected = options[Math.floor(Math.random() * options.length)]?.index;
-    if (selected !== undefined) ticCells[selected] = 'O';
-    ticBusy = false;
-    if (!endTicTurn(ticWinner(ticCells))) ticStatus.textContent = 'Tu turno: elige una casilla.';
-  }
-
-  function playTicMove(index) {
-    if (ticBusy || ticFinished || ticCells[index]) return;
-    ticCells[index] = 'X';
-    if (endTicTurn(ticWinner(ticCells))) return;
-    ticBusy = true;
-    ticStatus.textContent = 'FUNSISTANT está pensando…';
-    renderTicBoard();
-    window.setTimeout(funsistantTicMove, 280);
-  }
-
-  ticRestart.addEventListener('click', () => {
-    ticCells = Array(9).fill('');
-    ticBusy = false;
-    ticFinished = false;
-    ticStatus.textContent = 'Tu turno: elige una casilla.';
-    renderTicBoard();
-  });
-  renderTicBoard();
+// Gato Galáctico: dos personas juegan por turnos en el mismo dispositivo.
+const ticBoardElement=document.querySelector('#tic-board');
+if(ticBoardElement){
+ const ticStatus=document.querySelector('#gato-status'),ticRestart=document.querySelector('#gato-restart');
+ let ticCells=Array(9).fill(''),ticTurn='X',ticFinished=false;
+ const ticLines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+ function ticWinner(cells){for(const [a,b,c] of ticLines)if(cells[a]&&cells[a]===cells[b]&&cells[a]===cells[c])return cells[a];return cells.every(Boolean)?'draw':'';}
+ function renderTicBoard(){ticBoardElement.replaceChildren();ticCells.forEach((mark,index)=>{const cell=document.createElement('button');cell.type='button';cell.className='tic-cell'+(mark?' mark-'+mark.toLowerCase():'');cell.textContent=mark==='X'?'×':mark==='O'?'○':'';cell.setAttribute('aria-label','Casilla '+(index+1)+(mark?', jugador '+mark:', vacía'));cell.disabled=Boolean(mark)||ticFinished;cell.addEventListener('click',()=>playTicMove(index));ticBoardElement.append(cell);});}
+ function finishTic(result){ticFinished=true;ticStatus.textContent=result==='draw'?'¡Empate! Buena partida.':'¡Ganó el jugador '+(result==='X'?'×':'○')+'! ✨';advanceDailyMission('gato');recordGameResult('gato',result);renderTicBoard();}
+ function playTicMove(index){if(ticFinished||ticCells[index])return;ticCells[index]=ticTurn;const result=ticWinner(ticCells);if(result){finishTic(result);return;}ticTurn=ticTurn==='X'?'O':'X';ticStatus.textContent='Turno de '+(ticTurn==='X'?'×':'○')+'.';renderTicBoard();}
+ ticRestart.addEventListener('click',()=>{ticCells=Array(9).fill('');ticTurn='X';ticFinished=false;ticStatus.textContent='Turno de ×.';renderTicBoard();});
+ renderTicBoard();
 }
-
 // Bloques estelares: tablero de 8 × 8, colocación y despeje de filas y columnas.
 const blockBoardElement = document.querySelector('#block-board');
 if (blockBoardElement) {
@@ -1372,8 +1138,6 @@ if (beatGrid) {
   const beatToggle = document.querySelector('#beat-toggle');
   const beatTempo = document.querySelector('#beat-tempo');
   const beatStatus = document.querySelector('#beat-status');
-  const beatIdea = document.querySelector('#beat-idea');
-  const beatAiButton = document.querySelector('#beat-ai-generate');
   let beatAudio = null;
   let beatTimer = 0;
   let beatStep = 0;
@@ -1450,23 +1214,6 @@ if (beatGrid) {
   beatTempo.addEventListener('change', () => { if (beatPlaying) { window.clearInterval(beatTimer); beatTimer = window.setInterval(playBeatStep, Number(beatTempo.value)); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopBeat(); });
   window.addEventListener('pagehide', stopBeat);
-  beatAiButton.addEventListener('click', async () => {
-    beatAiButton.disabled = true;
-    beatStatus.textContent = 'FUNSISTANT está componiendo un patrón…';
-    const prompt = `Crea un patrón musical original de 8 pasos para ${beatIdea.value.trim() || 'un ambiente espacial alegre'}. Responde únicamente con cuatro líneas, sin markdown ni explicación: KICK: ocho ceros o unos, SNARE: ocho ceros o unos, HAT: ocho ceros o unos, SYNTH: ocho ceros o unos. Usa 1 para tocar y 0 para silencio. No incluyas números distintos de 0 y 1 en cada patrón.`;
-    try {
-      const response = await fetch(apiUrl('/api/funsistant'), { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'music', messages: [{ role: 'user', content: prompt }] }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'FUNSISTANT no pudo componer ahora.');
-      const reply = String(data.reply || '');
-      const parsed = beatRows.map((row) => ({ row, match: reply.match(new RegExp(`(?:^|\\n)\\s*${row.code}\\s*[:=]\\s*([01]{8})`, 'i')) }));
-      if (parsed.some((item) => !item.match)) throw new Error('La IA respondió, pero no armó un patrón válido. Prueba otra descripción.');
-      parsed.forEach(({ row, match }) => { row.pattern = [...match[1]].map(Number); });
-      renderBeatGrid();
-      beatStatus.textContent = '¡Ritmo original creado por FUNSISTANT! Puedes cambiar cada paso antes de tocarlo.';
-    } catch (error) { beatStatus.textContent = error.message || 'No pude crear el ritmo con la IA.'; }
-    finally { beatAiButton.disabled = false; }
-  });
 }
 
 document.querySelectorAll('.soundtrack-item audio').forEach((audio) => {
@@ -1815,10 +1562,16 @@ document.querySelector('#logout-button').addEventListener('click', async () => {
 const codingLessonList = document.querySelector('#coding-lesson-list');
 if (codingLessonList) {
   const codingLessons = [
-    { title: 'Variables', intro: 'Una variable guarda un dato para poder usarlo después.', challenge: 'Cambia el nombre para que la vista previa salude a tu explorador.', sample: '<main><h1 id="saludo"></h1></main>\n<script>\nconst nombre = "Viajero";\ndocument.getElementById("saludo").textContent = "Hola, " + nombre + " ✨";\n</script>', checks: ['const', 'getElementById', 'textContent'] },
-    { title: 'Botones y eventos', intro: 'addEventListener conecta una acción con un clic.', challenge: 'Haz que el botón aumente el contador cada vez que lo pulses.', sample: '<button id="boton">Sumar estrella</button>\n<p>Estrellas: <b id="total">0</b></p>\n<script>\nlet estrellas = 0;\ndocument.getElementById("boton").addEventListener("click", () => {\n  estrellas = estrellas + 1;\n  document.getElementById("total").textContent = estrellas;\n});\n</script>', checks: ['addEventListener', 'textContent', 'estrellas'] },
-    { title: 'Decisiones', intro: 'if y else permiten que el programa elija qué hacer.', challenge: 'Prueba distintos números de energía y observa cómo cambia el mensaje.', sample: '<h2 id="resultado"></h2>\n<script>\nconst energia = 7;\nif (energia >= 5) {\n  document.getElementById("resultado").textContent = "¡Despegue! 🚀";\n} else {\n  document.getElementById("resultado").textContent = "Recarga la nave ✨";\n}\n</script>', checks: ['if', 'else', '>='] },
-    { title: 'Repeticiones', intro: 'Un bucle for repite una acción varias veces.', challenge: 'Cambia el límite y cuenta más estrellas en la pantalla.', sample: '<ul id="estrellas"></ul>\n<script>\nconst lista = document.getElementById("estrellas");\nfor (let numero = 1; numero <= 5; numero++) {\n  const estrella = document.createElement("li");\n  estrella.textContent = "Estrella " + numero + " ✦";\n  lista.append(estrella);\n}\n</script>', checks: ['for', 'append', 'numero'] },
+    { title: 'Variables', intro: 'Una variable guarda un dato para poder usarlo después.', challenge: 'Cambia el nombre Viajero por otro nombre.', sample: '<main><h1 id="saludo"></h1></main>\n<script>\nconst nombre = "Viajero";\ndocument.getElementById("saludo").textContent = "Hola, " + nombre + " ✨";\n</script>', checks: ['const', 'getElementById', 'textContent'], validate: (code) => !code.includes('const nombre = "Viajero"') },
+    { title: 'Botones y eventos', intro: 'addEventListener conecta una acción con un clic.', challenge: 'Cambia el contador para que cada clic sume dos estrellas.', sample: '<button id="boton">Sumar estrella</button>\n<p>Estrellas: <b id="total">0</b></p>\n<script>\nlet estrellas = 0;\ndocument.getElementById("boton").addEventListener("click", () => {\n  estrellas = estrellas + 1;\n  document.getElementById("total").textContent = estrellas;\n});\n</script>', checks: ['addEventListener', 'textContent', 'estrellas'], validate: (code) => code.includes('estrellas = estrellas + 2') },
+    { title: 'Decisiones', intro: 'if y else permiten que el programa elija qué hacer.', challenge: 'Cambia la energía a 2 para mostrar el mensaje de recarga.', sample: '<h2 id="resultado"></h2>\n<script>\nconst energia = 7;\nif (energia >= 5) {\n  document.getElementById("resultado").textContent = "¡Despegue! 🚀";\n} else {\n  document.getElementById("resultado").textContent = "Recarga la nave ✨";\n}\n</script>', checks: ['if', 'else', '>='], validate: (code) => code.includes('const energia = 2') },
+    { title: 'Repeticiones', intro: 'Un bucle for repite una acción varias veces.', challenge: 'Cambia el límite del bucle para crear ocho estrellas.', sample: '<ul id="estrellas"></ul>\n<script>\nconst lista = document.getElementById("estrellas");\nfor (let numero = 1; numero <= 5; numero++) {\n  const estrella = document.createElement("li");\n  estrella.textContent = "Estrella " + numero + " ✦";\n  lista.append(estrella);\n}\n</script>', checks: ['for', 'append', 'numero'], validate: (code) => code.includes('numero <= 8') },
+  ];
+  const codingLessonGuides = [
+    ['const nombre = "Viajero" guarda el nombre en una variable.', 'getElementById("saludo") busca el elemento HTML que tiene ese id.', 'textContent coloca el saludo dentro de ese elemento.', 'Pulsa “Ver vista previa” para ver el resultado sin salir de la página.'],
+    ['let estrellas = 0 crea un contador que puede cambiar.', 'addEventListener("click", ...) espera a que pulses el botón.', 'estrellas = estrellas + 1 suma una estrella en cada clic.', 'textContent actualiza el número que aparece en pantalla.'],
+    ['const energia = 7 guarda el valor que vamos a revisar.', 'if (energia >= 5) comprueba si la energía llega a cinco.', 'Si la condición es verdadera, muestra “¡Despegue!”.', 'else muestra el mensaje alternativo cuando la condición es falsa.'],
+    ['getElementById("estrellas") encuentra la lista de la página.', 'for empieza en 1 y repite mientras numero sea menor o igual a 5.', 'createElement("li") prepara un renglón nuevo para cada estrella.', 'append agrega cada renglón a la lista para que aparezca en pantalla.'],
   ];
   const lessonKey = 'funverse-coding-lessons-v1';
   let completedLessons = 0;
@@ -1831,8 +1584,6 @@ if (codingLessonList) {
   const editor = document.querySelector('#coding-editor');
   const preview = document.querySelector('#coding-preview-frame');
   const status = document.querySelector('#coding-status');
-  const unlockCard = document.querySelector('#coder-unlock-card');
-  const lockState = document.querySelector('#coding-lock-state');
   const safePreview = () => {
     const content = editor.value.slice(0, 12_000).replace(/<script\s+src\s*=|<iframe\b|<form\b/gi, '<!-- elemento bloqueado -->');
     preview.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><style>body{font:16px system-ui;color:#f6f2ff;background:#11102a;padding:20px}button{padding:10px 14px;border:1px solid #56e9ff;border-radius:10px;background:#242052;color:white;cursor:pointer}li{margin:8px 0}h1{color:#79efff}</style></head><body>${content}</body></html>`;
@@ -1844,6 +1595,9 @@ if (codingLessonList) {
     lessonTitle.textContent = lesson.title;
     lessonExplanation.textContent = lesson.intro;
     lessonChallenge.textContent = `Reto: ${lesson.challenge}`;
+    const lessonGuide = document.querySelector('#coding-tutor-answer');
+    lessonGuide.hidden = false;
+    lessonGuide.textContent = `PASO A PASO\n${codingLessonGuides[currentLessonIndex].map((step, index) => `${index + 1}. ${step}`).join('\n')}`;
     editor.value = lesson.sample;
     status.textContent = currentLessonIndex < completedLessons ? 'Lección completada. Puedes volver a practicar.' : 'Prueba el ejemplo y luego completa el reto.';
     codingLessonList.replaceChildren();
@@ -1857,34 +1611,16 @@ if (codingLessonList) {
       button.addEventListener('click', () => { currentLessonIndex = index; renderLesson(); });
       codingLessonList.append(button);
     });
-    unlockCard.dataset.unlocked = String(completedLessons === codingLessons.length);
-    lockState.textContent = completedLessons === codingLessons.length ? 'DESBLOQUEADO · 4/4' : `BLOQUEADO · ${completedLessons}/${codingLessons.length}`;
-    const mode = document.querySelector('#assistant-mode option[value="coder-pro"]');
-    if (mode) { mode.disabled = completedLessons !== codingLessons.length; mode.textContent = completedLessons === codingLessons.length ? 'FUN-CODER 3.8 ASTRA · desbloqueado' : 'FUN-CODER 3.8 ASTRA · bloqueado'; }
+    document.querySelector('#coding-progress').textContent = completedLessons + '/' + codingLessons.length;
   }
   document.querySelector('#coding-run').addEventListener('click', () => { safePreview(); status.textContent = 'Vista previa actualizada en el espacio aislado.'; });
   document.querySelector('#coding-check').addEventListener('click', () => {
     const lesson = codingLessons[currentLessonIndex];
-    const passed = lesson.checks.every((token) => editor.value.includes(token));
-    if (!passed) { status.textContent = `Revisa el reto: incluye ${lesson.checks.filter((token) => !editor.value.includes(token)).join(', ')}.`; return; }
+    const passed = editor.value.trim() !== lesson.sample.trim() && lesson.checks.every((token) => editor.value.includes(token)) && lesson.validate(editor.value);
+    if (!passed) { status.textContent = 'No basta con pulsar el botón: completa el cambio del reto y vuelve a revisar.'; return; }
     if (currentLessonIndex === completedLessons) { completedLessons += 1; try { localStorage.setItem(lessonKey, String(completedLessons)); } catch {} }
-    status.textContent = completedLessons === codingLessons.length ? '¡Terminaste FUN Academy! Se desbloqueó FUN-CODER 3.8 ASTRA en este navegador.' : '¡Lección completada! Ya puedes abrir la siguiente. ✨';
+    status.textContent = completedLessons === codingLessons.length ? '¡Terminaste las cuatro lecciones de FUN Academy! ✨' : '¡Lección completada! Ya puedes abrir la siguiente. ✨';
     renderLesson();
-  });
-  document.querySelector('#coding-tutor-ask').addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    const answer = document.querySelector('#coding-tutor-answer');
-    button.disabled = true;
-    answer.hidden = false;
-    answer.textContent = 'FUNSISTANT está preparando una explicación paso a paso…';
-    try {
-      const lesson = codingLessons[currentLessonIndex];
-      const response = await fetch('/api/funsistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'teacher', messages: [{ role: 'user', content: `Explícame paso a paso la lección de programación «${lesson.title}». ${lesson.intro} Reto: ${lesson.challenge}` }] }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'FUNSISTANT no está disponible ahora.');
-      answer.textContent = data.reply;
-    } catch (error) { answer.textContent = error.message || 'No pude conectar con FUNSISTANT. Revisa start-funverse.bat.'; }
-    finally { button.disabled = false; }
   });
   renderLesson();
   safePreview();
