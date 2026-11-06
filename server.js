@@ -53,6 +53,8 @@ const dataDir = path.resolve(process.env.FUNVERSE_DATA_DIR || path.join(root, '.
 const videosDir = path.join(dataDir, 'videos');
 const ownerFile = path.join(dataDir, 'owner.json');
 const usersFile = path.join(dataDir, 'users.json');
+const reportsFile = path.join(dataDir, 'reports.json');
+const socialFile = path.join(dataDir, 'social.json');
 const videosFile = path.join(dataDir, 'videos.json');
 const eventSettingsFile = path.join(dataDir, 'events.json');
 const siteSettingsFile = path.join(dataDir, 'site-settings.json');
@@ -60,6 +62,7 @@ const twoFactorKeyFile = path.join(dataDir, 'two-factor.key');
 const MAX_VIDEO_SIZE = 300 * 1024 * 1024;
 const SESSION_MAX_AGE = 12 * 60 * 60;
 const EVENT_EFFECTS = Object.freeze(['confetti', 'rainbow', 'big-head', 'spotlight', 'low-gravity', 'super-speed', 'giant', 'mini', 'meteor', 'bouncy', 'ufo', 'pet-parade', 'reverse-gravity', 'party-chaos', 'points-rain']);
+const EVENT_MUSIC = Object.freeze(['Chasing_The_Spotlight.mp3', 'Baneo_Masivo.mp3', 'Beyond_The_Door.mp3', 'Breaking_the_Cage.mp3', 'Rewrite_the_Scene.mp3']);
 const mime = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg',
@@ -161,6 +164,50 @@ async function saveUsers(users) {
   const temporary = `${usersFile}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   await writeFile(temporary, JSON.stringify(users, null, 2), { flag: 'wx' });
   await rename(temporary, usersFile);
+}
+
+function isStaff(user) {
+  return Boolean(user && ['owner', 'admin'].includes(user.role));
+}
+
+async function readReports() {
+  try {
+    const reports = JSON.parse(await readFile(reportsFile, 'utf8'));
+    return Array.isArray(reports) ? reports : [];
+  } catch { return []; }
+}
+
+async function saveReports(reports) {
+  await mkdir(dataDir, { recursive: true });
+  const temporary = `${reportsFile}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  await writeFile(temporary, JSON.stringify(reports, null, 2), { flag: 'wx' });
+  await rename(temporary, reportsFile);
+}
+
+async function readSocial() {
+  try {
+    const social = JSON.parse(await readFile(socialFile, 'utf8'));
+    return { friends: Array.isArray(social.friends) ? social.friends : [], requests: Array.isArray(social.requests) ? social.requests : [], messages: Array.isArray(social.messages) ? social.messages : [] };
+  } catch { return { friends: [], requests: [], messages: [] }; }
+}
+
+async function saveSocial(social) {
+  await mkdir(dataDir, { recursive: true });
+  const temporary = `${socialFile}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  await writeFile(temporary, JSON.stringify(social, null, 2), { flag: 'wx' });
+  await rename(temporary, socialFile);
+}
+
+function publicAccountByEmail(email, owner, users) {
+  if (owner?.email === email) return { ...publicProfile(owner, email), email, role: 'owner' };
+  const account = users.find((item) => item.email === email);
+  if (!account) return null;
+  const role = ['admin', 'parent'].includes(account.role) ? account.role : 'user';
+  return { ...publicProfile(account, email), email, role };
+}
+
+function areFriends(social, first, second) {
+  return social.friends.some((friendship) => (friendship.userA === first && friendship.userB === second) || (friendship.userA === second && friendship.userB === first));
 }
 
 function emailNotificationsReady() {
@@ -370,6 +417,26 @@ async function authApi(request, response, pathname) {
       emailNotificationsReady: emailNotificationsReady(),
     });
   }
+  if (pathname === '/api/auth/progress') {
+    const user = currentUser(request);
+    if (!user) return json(response, 401, { error: 'Inicia sesión para sincronizar tu progreso.' });
+    const loaded = await loadAccountForUser(user);
+    if (!loaded.account) return json(response, 401, { error: 'No encontré tu cuenta.' });
+    const initialized = Number.isSafeInteger(loaded.account.progress?.xp);
+    const currentXp = initialized ? loaded.account.progress.xp : 0;
+    if (request.method === 'GET') return json(response, 200, { xp: currentXp, initialized });
+    if (request.method !== 'POST') return json(response, 405, { error: 'Usa GET o POST para consultar el progreso.' });
+    let body;
+    try { body = await readBody(request); }
+    catch (error) { return json(response, error.status || 400, { error: error.message }); }
+    const submittedXp = Number(body?.xp);
+    if (!Number.isSafeInteger(submittedXp) || submittedXp < 0 || submittedXp > 1_000_000) return json(response, 400, { error: 'El XP debe ser un número entero de 0 a 1,000,000.' });
+    loaded.account.progress = loaded.account.progress && typeof loaded.account.progress === 'object' ? loaded.account.progress : {};
+    loaded.account.progress.xp = Math.max(currentXp, submittedXp);
+    loaded.account.progress.updatedAt = new Date().toISOString();
+    await saveAccountForUser(user, loaded.account, loaded.users);
+    return json(response, 200, { xp: loaded.account.progress.xp });
+  }
   if (pathname === '/api/auth/profile' && request.method === 'POST') {
     const user = currentUser(request);
     if (!user) return json(response, 401, { error: 'Inicia sesión para editar tu perfil.' });
@@ -509,7 +576,8 @@ async function authApi(request, response, pathname) {
     if (!owner) return json(response, 409, { error: 'Primero configura la cuenta propietaria.' });
     const users = await readUsers();
     const savedUser = users.find((user) => user.email === email);
-    const account = email === owner.email ? { ...owner, role: 'owner' } : savedUser ? { ...savedUser, role: savedUser.role === 'parent' ? 'parent' : 'user' } : null;
+    const savedRole = ['admin', 'parent'].includes(savedUser?.role) ? savedUser.role : 'user';
+    const account = email === owner.email ? { ...owner, role: 'owner' } : savedUser ? { ...savedUser, role: savedRole } : null;
     const candidate = await hashPassword(password, account?.salt || DUMMY_PASSWORD_SALT);
     const candidateHash = Buffer.from(candidate.hash, 'hex');
     const savedHash = /^[a-f0-9]{128}$/i.test(account?.hash || '') ? Buffer.from(account.hash, 'hex') : Buffer.alloc(64);
@@ -595,7 +663,7 @@ async function videoApi(request, response, pathname) {
   if (request.method === 'POST' && pathname === '/api/videos') {
     const user = currentUser(request);
     if (!user) return json(response, 401, { error: 'Inicia sesión como propietario para subir videos.' });
-    if (user.role !== 'owner') return json(response, 403, { error: 'Solo la cuenta propietaria puede subir videos.' });
+    if (!isStaff(user)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden subir videos.' });
     let rawName = '';
     try { rawName = decodeURIComponent(String(request.headers['x-video-name'] || '')); }
     catch { return json(response, 400, { error: 'El nombre del video no es válido.' }); }
@@ -637,7 +705,7 @@ async function videoApi(request, response, pathname) {
   if (idMatch && request.method === 'DELETE') {
     const user = currentUser(request);
     if (!user) return json(response, 401, { error: 'Inicia sesión como propietario para borrar videos.' });
-    if (user.role !== 'owner') return json(response, 403, { error: 'Solo la cuenta propietaria puede quitar videos.' });
+    if (!isStaff(user)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden quitar videos.' });
     const videos = await readVideos();
     const target = videos.find((video) => video.id === idMatch[1]);
     if (!target) return json(response, 404, { error: 'No encontré ese video.' });
@@ -701,9 +769,15 @@ function mexicoWallTimeToUtc(year, month, day, hour, minute = 0) {
 async function readEventSettings() {
   try {
     const settings = JSON.parse(await readFile(eventSettingsFile, 'utf8'));
+    const normalizeEffects = (values, fallback) => {
+      const list = Array.isArray(values) ? values.filter((item) => EVENT_EFFECTS.includes(item)) : [];
+      const result = [...new Set(list)].slice(0, 5);
+      return result.length ? result : [EVENT_EFFECTS.includes(fallback) ? fallback : 'confetti'];
+    };
+    const effects = normalizeEffects(settings.effects, settings.effect);
     const manualEvent = settings.manualEvent && Number.isFinite(Date.parse(settings.manualEvent.startedAt)) && Number.isFinite(Date.parse(settings.manualEvent.endsAt))
       && EVENT_EFFECTS.includes(settings.manualEvent.effect)
-      ? { startedAt: settings.manualEvent.startedAt, endsAt: settings.manualEvent.endsAt, effect: settings.manualEvent.effect }
+      ? { startedAt: settings.manualEvent.startedAt, endsAt: settings.manualEvent.endsAt, effect: settings.manualEvent.effect, effects: normalizeEffects(settings.manualEvent.effects, settings.manualEvent.effect), music: EVENT_MUSIC.includes(settings.manualEvent.music) ? settings.manualEvent.music : null }
       : null;
     const announcement = settings.announcement && typeof settings.announcement.title === 'string' && typeof settings.announcement.body === 'string'
       && Number.isFinite(Date.parse(settings.announcement.expiresAt)) && Date.parse(settings.announcement.expiresAt) > Date.now()
@@ -712,12 +786,15 @@ async function readEventSettings() {
     return {
       weeklyEnabled: settings.weeklyEnabled !== false,
       durationMinutes: [30, 60, 90].includes(Number(settings.durationMinutes)) ? Number(settings.durationMinutes) : 60,
-      effect: EVENT_EFFECTS.includes(settings.effect) ? settings.effect : 'confetti',
+      effect: effects[0],
+      effects,
+      music: EVENT_MUSIC.includes(settings.music) ? settings.music : 'Chasing_The_Spotlight.mp3',
       manualEvent,
       announcement,
       announcementEventId: typeof settings.announcementEventId === 'string' ? settings.announcementEventId : '',
+      seasonalEvents: Array.isArray(settings.seasonalEvents) ? settings.seasonalEvents.filter((item) => Number.isInteger(item?.month) && item.month >= 0 && item.month <= 11 && Number.isFinite(Date.parse(item.startedAt)) && Number.isFinite(Date.parse(item.endsAt))).slice(-12) : [],
     };
-  } catch { return { weeklyEnabled: true, durationMinutes: 60, effect: 'confetti', manualEvent: null, announcement: null, announcementEventId: '' }; }
+  } catch { return { weeklyEnabled: true, durationMinutes: 60, effect: 'confetti', effects: ['confetti'], music: 'Chasing_The_Spotlight.mp3', manualEvent: null, announcement: null, announcementEventId: '', seasonalEvents: [] }; }
 }
 
 async function saveEventSettings(settings) {
@@ -729,8 +806,8 @@ async function saveEventSettings(settings) {
 
 async function adminEventsApi(request, response) {
   const user = currentUser(request);
-  if (!user) return json(response, 401, { error: 'Inicia sesión como propietario para gestionar eventos.' });
-  if (user.role !== 'owner') return json(response, 403, { error: 'Solo la cuenta propietaria puede gestionar eventos.' });
+  if (!user) return json(response, 401, { error: 'Inicia sesión como OWNER o ADMIN para gestionar eventos.' });
+  if (!isStaff(user)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden gestionar eventos.' });
   if (request.method === 'GET') {
     const settings = await readEventSettings();
     const eventState = weeklyAdminAbuseState(new Date(), settings);
@@ -743,22 +820,27 @@ async function adminEventsApi(request, response) {
   if (!body || typeof body !== 'object') return json(response, 400, { error: 'La configuración del evento no es válida.' });
   const previous = await readEventSettings();
   const action = body.action;
-  if (action !== undefined && !['start', 'stop', 'announce', 'clear-announcement'].includes(action)) return json(response, 400, { error: 'La acción del evento no es válida.' });
+  if (action !== undefined && !['start', 'stop', 'announce', 'clear-announcement', 'start-season', 'stop-season'].includes(action)) return json(response, 400, { error: 'La acción del evento no es válida.' });
   if (action === 'announce' && (typeof body.body !== 'string' || !body.body.trim() || body.body.trim().length > 260)) {
     return json(response, 400, { error: 'Escribe un mensaje de hasta 260 caracteres.' });
   }
   const weeklyEnabled = body.weeklyEnabled === undefined ? previous.weeklyEnabled : body.weeklyEnabled;
   const durationMinutes = body.durationMinutes === undefined ? previous.durationMinutes : Number(body.durationMinutes);
-  const effect = body.effect === undefined ? previous.effect : body.effect;
+  const requestedEffects = body.effects === undefined ? (body.effect === undefined ? previous.effects : [body.effect]) : body.effects;
+  const effects = Array.isArray(requestedEffects) ? [...new Set(requestedEffects.filter((item) => EVENT_EFFECTS.includes(item)))].slice(0, 5) : [];
+  const effect = effects[0] || previous.effect;
+  const music = body.music === undefined ? previous.music : body.music;
   if (typeof weeklyEnabled !== 'boolean') return json(response, 400, { error: 'Elige si el evento semanal está activo o pausado.' });
   if (![30, 60, 90].includes(durationMinutes)) return json(response, 400, { error: 'La duración debe ser de 30, 60 o 90 minutos.' });
-  if (!EVENT_EFFECTS.includes(effect)) return json(response, 400, { error: 'El efecto del evento no es válido.' });
+  if (!effects.length || !EVENT_EFFECTS.includes(effect)) return json(response, 400, { error: 'Selecciona de 1 a 5 efectos válidos para el evento.' });
+  if (!EVENT_MUSIC.includes(music)) return json(response, 400, { error: 'Elige una canción disponible para los eventos.' });
   let manualEvent = previous.manualEvent;
   let announcement = previous.announcement;
   let announcementEventId = previous.announcementEventId;
+  let seasonalEvents = previous.seasonalEvents.filter((item) => Date.parse(item.endsAt) > Date.now());
   if (action === 'start') {
     const startedAt = new Date();
-    manualEvent = { startedAt: startedAt.toISOString(), endsAt: new Date(startedAt.getTime() + durationMinutes * 60_000).toISOString(), effect };
+    manualEvent = { startedAt: startedAt.toISOString(), endsAt: new Date(startedAt.getTime() + durationMinutes * 60_000).toISOString(), effect, effects, music };
     announcementEventId = startedAt.toISOString();
     announcement = { title: 'ADMIN ABUSE EN VIVO', body: '¡DANZOK inició la fiesta! Recoge las estrellas y gana hasta 100 XP durante esta sesión.', publishedAt: startedAt.toISOString(), expiresAt: new Date(startedAt.getTime() + 10_000).toISOString() };
     console.log(`La cuenta propietaria inició FUNVERSE ADMIN ABUSE por ${durationMinutes} minutos.`);
@@ -772,22 +854,36 @@ async function adminEventsApi(request, response) {
   } else if (action === 'clear-announcement') {
     announcement = null;
     console.log('La cuenta propietaria retiró el anuncio de DANZOK.');
+  } else if (action === 'start-season') {
+    const month = Number(body.month);
+    if (!Number.isInteger(month) || month < 0 || month > 11) return json(response, 400, { error: 'Elige una celebración de enero a diciembre.' });
+    const startedAt = new Date();
+    seasonalEvents = seasonalEvents.filter((item) => item.month !== month);
+    seasonalEvents.push({ id: crypto.randomUUID(), month, startedAt: startedAt.toISOString(), endsAt: new Date(startedAt.getTime() + durationMinutes * 60_000).toISOString(), music });
+    announcement = { title: '', body: `¡Comenzó una celebración de temporada en FUNVERSE! Entra al reto y gana puntos.`, publishedAt: startedAt.toISOString(), expiresAt: new Date(startedAt.getTime() + 10_000).toISOString() };
+  } else if (action === 'stop-season') {
+    const month = Number(body.month);
+    if (!Number.isInteger(month) || month < 0 || month > 11) return json(response, 400, { error: 'Elige la celebración que quieres terminar.' });
+    seasonalEvents = seasonalEvents.filter((item) => item.month !== month);
   }
-  const settings = { weeklyEnabled, durationMinutes, effect, manualEvent, announcement, announcementEventId, updatedAt: new Date().toISOString(), updatedBy: user.email };
+  const settings = { weeklyEnabled, durationMinutes, effect, effects, music, manualEvent, announcement, announcementEventId, seasonalEvents, updatedAt: new Date().toISOString(), updatedBy: user.email };
   await saveEventSettings(settings);
   if (weeklyEnabled !== previous.weeklyEnabled) console.log(`La cuenta propietaria ${weeklyEnabled ? 'activó' : 'pausó'} FUNVERSE ADMIN ABUSE.`);
   const eventState = weeklyAdminAbuseState(new Date(), settings);
-  return json(response, 200, { weeklyEnabled: settings.weeklyEnabled, durationMinutes: settings.durationMinutes, effect: settings.effect, manualActive: eventState.manualActive, manualEndsAt: eventState.source === 'manual' ? eventState.endsAt : null, announcement: settings.announcement });
+  return json(response, 200, { weeklyEnabled: settings.weeklyEnabled, durationMinutes: settings.durationMinutes, effect: settings.effect, effects: settings.effects, music: settings.music, manualActive: eventState.manualActive, manualEndsAt: eventState.source === 'manual' ? eventState.endsAt : null, seasonalEvents: eventState.seasonalEvents, announcement: settings.announcement });
 }
 
 async function adminUsersApi(request, response) {
-  const owner = currentUser(request);
-  if (!owner) return json(response, 401, { error: 'Inicia sesión como OWNER para administrar cuentas.' });
-  if (owner.role !== 'owner') return json(response, 403, { error: 'Solo la única cuenta OWNER puede administrar cuentas.' });
+  const actor = currentUser(request);
+  if (!actor) return json(response, 401, { error: 'Inicia sesión como OWNER o ADMIN para abrir el panel.' });
+  if (!isStaff(actor)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden abrir el panel.' });
   const ownerAccount = readOwner();
   if (request.method === 'GET') {
-    const users = await readUsers();
-    return json(response, 200, { users: users.map((account) => ({ ...publicProfile(account, account.email), email: account.email, role: account.role === 'parent' ? 'parent' : 'user', createdAt: account.createdAt || null, banned: account.banned === true, banReason: typeof account.banReason === 'string' ? account.banReason : '' })) });
+    const [users, reports] = await Promise.all([readUsers(), readReports()]);
+    return json(response, 200, { users: users.map((account) => {
+      const targetReports = reports.filter((report) => report.targetEmail === account.email);
+      return { ...publicProfile(account, account.email), email: account.email, role: ['admin', 'parent'].includes(account.role) ? account.role : 'user', xp: Number.isSafeInteger(account.progress?.xp) ? account.progress.xp : 0, reportsCount: targetReports.length, openReportsCount: targetReports.filter((report) => ['new', 'reviewing'].includes(report.status)).length, createdAt: account.createdAt || null, banned: account.banned === true, banReason: typeof account.banReason === 'string' ? account.banReason : '' };
+    }) });
   }
   if (request.method !== 'POST') return json(response, 405, { error: 'Usa GET o POST para administrar cuentas.' });
   let body;
@@ -795,15 +891,42 @@ async function adminUsersApi(request, response) {
   catch (error) { return json(response, error.status || 400, { error: error.message }); }
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
   if (!email || email === ownerAccount?.email) return json(response, 400, { error: 'No puedes suspender ni modificar la cuenta OWNER.' });
-  if (!['ban', 'unban'].includes(body.action)) return json(response, 400, { error: 'Elige ban o unban.' });
   const users = await readUsers();
   const account = users.find((item) => item.email === email);
   if (!account) return json(response, 404, { error: 'No encontré esa cuenta.' });
+  if (body.action === 'reset-xp') {
+    account.progress = account.progress && typeof account.progress === 'object' ? account.progress : {};
+    account.progress.xp = 0;
+    account.progress.updatedAt = new Date().toISOString();
+    await saveUsers(users);
+    return json(response, 200, { email, xp: 0 });
+  }
+  if (body.action === 'set-xp' || body.action === 'add-xp') {
+    const value = body.action === 'set-xp' ? Number(body.xp) : Number(body.amount);
+    if (!Number.isSafeInteger(value) || value < (body.action === 'set-xp' ? 0 : 1) || value > 1_000_000) return json(response, 400, { error: 'XP debe ser un número entero de 0 a 1,000,000.' });
+    account.progress = account.progress && typeof account.progress === 'object' ? account.progress : {};
+    account.progress.xp = body.action === 'set-xp' ? value : Math.min(1_000_000, (Number.isSafeInteger(account.progress.xp) ? account.progress.xp : 0) + value);
+    account.progress.updatedAt = new Date().toISOString();
+    await saveUsers(users);
+    return json(response, 200, { email, xp: account.progress.xp });
+  }
+  if (actor.role !== 'owner') return json(response, 403, { error: 'ADMIN puede gestionar XP, pero solo OWNER puede suspender cuentas o cambiar roles.' });
+  if (body.action === 'set-role') {
+    const role = body.role;
+    if (!['admin', 'user', 'parent'].includes(role)) return json(response, 400, { error: 'Elige Admin, Usuario o Adulto responsable.' });
+    if (account.banned && role === 'admin') return json(response, 409, { error: 'Reactiva la cuenta antes de asignarle el rol Admin.' });
+    account.role = role;
+    account.roleUpdatedAt = new Date().toISOString();
+    for (const session of sessions.values()) if (session.email === email) session.role = role;
+    await saveUsers(users);
+    return json(response, 200, { email, role: account.role });
+  }
+  if (!['ban', 'unban'].includes(body.action)) return json(response, 400, { error: 'Elige suspender, reactivar o cambiar el rol.' });
   if (body.action === 'ban') {
     account.banned = true;
     account.bannedAt = new Date().toISOString();
     account.banReason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 160) : '';
-    for (const [token, session] of sessions) if (session.email === email && session.role !== 'owner') sessions.delete(token);
+    for (const [token, session] of sessions) if (session.email === email) sessions.delete(token);
   } else {
     account.banned = false;
     delete account.bannedAt;
@@ -811,6 +934,178 @@ async function adminUsersApi(request, response) {
   }
   await saveUsers(users);
   return json(response, 200, { email, banned: account.banned });
+}
+
+async function adminReportsApi(request, response) {
+  const actor = currentUser(request);
+  if (!actor) return json(response, 401, { error: 'Inicia sesión como OWNER o ADMIN para revisar denuncias.' });
+  if (!isStaff(actor)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden revisar denuncias.' });
+  if (request.method === 'GET') return json(response, 200, { reports: (await readReports()).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
+  if (request.method !== 'POST') return json(response, 405, { error: 'Usa GET o POST para revisar denuncias.' });
+  let body;
+  try { body = await readBody(request); }
+  catch (error) { return json(response, error.status || 400, { error: error.message }); }
+  const statuses = ['new', 'reviewing', 'resolved', 'dismissed'];
+  if (typeof body?.id !== 'string' || !statuses.includes(body.status)) return json(response, 400, { error: 'Elige una denuncia y un estado válido.' });
+  const reports = await readReports();
+  const report = reports.find((item) => item.id === body.id);
+  if (!report) return json(response, 404, { error: 'No encontré esa denuncia.' });
+  report.status = body.status;
+  report.updatedAt = new Date().toISOString();
+  report.reviewedBy = actor.email;
+  await saveReports(reports);
+  return json(response, 200, { id: report.id, status: report.status });
+}
+
+async function adminRewardsApi(request, response) {
+  const actor = currentUser(request);
+  if (!actor) return json(response, 401, { error: 'Inicia sesión como OWNER o ADMIN para regalar puntos.' });
+  if (!isStaff(actor)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden regalar puntos globales.' });
+  if (request.method !== 'POST') return json(response, 405, { error: 'Usa POST para regalar puntos.' });
+  let body;
+  try { body = await readBody(request); }
+  catch (error) { return json(response, error.status || 400, { error: error.message }); }
+  const amount = Number(body?.amount);
+  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 100_000) return json(response, 400, { error: 'El regalo debe ser de 1 a 100,000 XP por cuenta.' });
+  const users = await readUsers();
+  let recipients = 0;
+  let totalAwarded = 0;
+  const addReward = (account) => {
+    if (!account) return;
+    account.progress = account.progress && typeof account.progress === 'object' ? account.progress : {};
+    const current = Number.isSafeInteger(account.progress.xp) ? account.progress.xp : 0;
+    const awarded = Math.min(amount, 1_000_000 - current);
+    if (awarded <= 0) return;
+    account.progress.xp = current + awarded;
+    account.progress.updatedAt = new Date().toISOString();
+    recipients += 1;
+    totalAwarded += awarded;
+  };
+  for (const account of users) if (!account.banned) addReward(account);
+  const owner = readOwner();
+  if (owner) {
+    addReward(owner);
+    const temporary = `${ownerFile}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+    await writeFile(temporary, JSON.stringify(owner, null, 2), { flag: 'wx' });
+    await rename(temporary, ownerFile);
+  }
+  await saveUsers(users);
+  console.log(`${actor.email} regaló ${amount} XP a ${recipients} cuentas de FUNVERSE.`);
+  return json(response, 200, { amount, recipients, totalAwarded });
+}
+
+async function userReportsApi(request, response) {
+  const reporter = currentUser(request);
+  if (!reporter) return json(response, 401, { error: 'Inicia sesión antes de enviar una denuncia.' });
+  if (request.method !== 'POST') return json(response, 405, { error: 'Usa POST para enviar una denuncia.' });
+  let body;
+  try { body = await readBody(request); }
+  catch (error) { return json(response, error.status || 400, { error: error.message }); }
+  const targetEmail = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const reason = typeof body?.reason === 'string' ? body.reason : '';
+  const details = typeof body?.details === 'string' ? body.details.trim().slice(0, 600) : '';
+  const validReasons = ['acoso', 'contenido', 'suplantacion', 'seguridad', 'otro'];
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) return json(response, 400, { error: 'Escribe el correo de la cuenta que quieres denunciar.' });
+  if (targetEmail === reporter.email) return json(response, 400, { error: 'No puedes denunciar tu propia cuenta.' });
+  if (!validReasons.includes(reason)) return json(response, 400, { error: 'Elige un motivo para la denuncia.' });
+  if (details.length < 10) return json(response, 400, { error: 'Describe lo ocurrido con al menos 10 caracteres.' });
+  const owner = readOwner();
+  const users = await readUsers();
+  const target = publicAccountByEmail(targetEmail, owner, users);
+  if (!target) return json(response, 404, { error: 'No encontré esa cuenta de FUNVERSE.' });
+  const reports = await readReports();
+  const recentDuplicate = reports.some((report) => report.reporterEmail === reporter.email && report.targetEmail === targetEmail && Date.now() - Date.parse(report.createdAt) < 60_000);
+  if (recentDuplicate) return json(response, 429, { error: 'Ya enviaste una denuncia reciente para esa cuenta. Espera un minuto.' });
+  reports.push({ id: crypto.randomUUID(), reporterEmail: reporter.email, targetEmail, targetName: target.displayName, reason, details, status: 'new', createdAt: new Date().toISOString() });
+  await saveReports(reports.slice(-500));
+  return json(response, 201, { submitted: true, message: 'Denuncia enviada al equipo de FUNVERSE.' });
+}
+
+async function friendsApi(request, response) {
+  const user = currentUser(request);
+  if (!user) return json(response, 401, { error: 'Inicia sesión para usar Amigos.' });
+  const social = await readSocial();
+  const owner = readOwner();
+  const users = await readUsers();
+  if (request.method === 'GET') {
+    const friends = social.friends
+      .filter((item) => item.userA === user.email || item.userB === user.email)
+      .map((item) => publicAccountByEmail(item.userA === user.email ? item.userB : item.userA, owner, users))
+      .filter(Boolean);
+    const formatRequest = (item) => ({ id: item.id, createdAt: item.createdAt, account: publicAccountByEmail(item.from === user.email ? item.to : item.from, owner, users) });
+    const incoming = social.requests.filter((item) => item.to === user.email && item.status === 'pending').map(formatRequest).filter((item) => item.account);
+    const outgoing = social.requests.filter((item) => item.from === user.email && item.status === 'pending').map(formatRequest).filter((item) => item.account);
+    return json(response, 200, { friends, incoming, outgoing });
+  }
+  if (request.method !== 'POST') return json(response, 405, { error: 'Usa GET o POST para administrar amistades.' });
+  let body;
+  try { body = await readBody(request); }
+  catch (error) { return json(response, error.status || 400, { error: error.message }); }
+  const action = body?.action;
+  if (action === 'request') {
+    const targetEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) return json(response, 400, { error: 'Escribe el correo de tu amigo.' });
+    if (targetEmail === user.email) return json(response, 400, { error: 'No puedes agregarte a ti mismo.' });
+    const target = publicAccountByEmail(targetEmail, owner, users);
+    if (!target || (target.role !== 'owner' && users.find((item) => item.email === targetEmail)?.banned)) return json(response, 404, { error: 'No encontré una cuenta activa con ese correo.' });
+    if (areFriends(social, user.email, targetEmail)) return json(response, 409, { error: 'Esa cuenta ya está en tu lista de amigos.' });
+    const reverse = social.requests.find((item) => item.from === targetEmail && item.to === user.email && item.status === 'pending');
+    if (reverse) {
+      reverse.status = 'accepted';
+      reverse.updatedAt = new Date().toISOString();
+      social.friends.push({ userA: user.email, userB: targetEmail, createdAt: reverse.updatedAt });
+      await saveSocial(social);
+      return json(response, 200, { accepted: true, message: `Ahora tú y ${target.displayName} son amigos.` });
+    }
+    if (social.requests.some((item) => item.from === user.email && item.to === targetEmail && item.status === 'pending')) return json(response, 409, { error: 'Ya enviaste una solicitud a esa cuenta.' });
+    const createdAt = new Date().toISOString();
+    social.requests.push({ id: crypto.randomUUID(), from: user.email, to: targetEmail, status: 'pending', createdAt });
+    await saveSocial(social);
+    return json(response, 201, { requested: true, message: `Solicitud enviada a ${target.displayName}.` });
+  }
+  if (action === 'accept' || action === 'decline') {
+    const request = social.requests.find((item) => item.id === body.id && item.to === user.email && item.status === 'pending');
+    if (!request) return json(response, 404, { error: 'La solicitud ya no está disponible.' });
+    request.status = action === 'accept' ? 'accepted' : 'declined';
+    request.updatedAt = new Date().toISOString();
+    if (action === 'accept' && !areFriends(social, request.from, request.to)) social.friends.push({ userA: request.from, userB: request.to, createdAt: request.updatedAt });
+    await saveSocial(social);
+    return json(response, 200, { status: request.status });
+  }
+  if (action === 'remove') {
+    const targetEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!areFriends(social, user.email, targetEmail)) return json(response, 404, { error: 'Esa cuenta no está en tu lista de amigos.' });
+    social.friends = social.friends.filter((item) => !((item.userA === user.email && item.userB === targetEmail) || (item.userA === targetEmail && item.userB === user.email)));
+    await saveSocial(social);
+    return json(response, 200, { removed: true });
+  }
+  return json(response, 400, { error: 'La acción de amistad no es válida.' });
+}
+
+async function chatApi(request, response, url) {
+  const user = currentUser(request);
+  if (!user) return json(response, 401, { error: 'Inicia sesión para usar el chat.' });
+  if (request.method === 'GET') {
+    const targetEmail = String(url.searchParams.get('with') || '').trim().toLowerCase();
+    if (!targetEmail || !areFriends(await readSocial(), user.email, targetEmail)) return json(response, 403, { error: 'Solo puedes chatear con tus amigos.' });
+    const social = await readSocial();
+    const messages = social.messages.filter((item) => (item.from === user.email && item.to === targetEmail) || (item.from === targetEmail && item.to === user.email)).slice(-100);
+    return json(response, 200, { messages });
+  }
+  if (request.method !== 'POST') return json(response, 405, { error: 'Usa GET o POST para el chat.' });
+  let body;
+  try { body = await readBody(request); }
+  catch (error) { return json(response, error.status || 400, { error: error.message }); }
+  const targetEmail = typeof body?.to === 'string' ? body.to.trim().toLowerCase() : '';
+  const message = typeof body?.text === 'string' ? body.text.trim().slice(0, 500) : '';
+  const social = await readSocial();
+  if (!areFriends(social, user.email, targetEmail)) return json(response, 403, { error: 'Solo puedes enviar mensajes a tus amigos.' });
+  if (!message) return json(response, 400, { error: 'Escribe un mensaje antes de enviarlo.' });
+  const item = { id: crypto.randomUUID(), from: user.email, to: targetEmail, text: message, createdAt: new Date().toISOString() };
+  social.messages.push(item);
+  social.messages = social.messages.slice(-2_000);
+  await saveSocial(social);
+  return json(response, 201, { message: item });
 }
 
 function weeklyAdminAbuseState(now = new Date(), settings = {}) {
@@ -822,7 +1117,9 @@ function weeklyAdminAbuseState(now = new Date(), settings = {}) {
   const saturdayAtNoon = mexicoWallTimeToUtc(year, month, day + ((6 - weekdayIndex + 7) % 7), 12);
   const durationMinutes = [30, 60, 90].includes(Number(settings.durationMinutes)) ? Number(settings.durationMinutes) : 60;
   const enabled = settings.weeklyEnabled !== false;
-  const effect = EVENT_EFFECTS.includes(settings.effect) ? settings.effect : 'confetti';
+  const configuredEffects = Array.isArray(settings.effects) ? [...new Set(settings.effects.filter((item) => EVENT_EFFECTS.includes(item)))].slice(0, 5) : [];
+  const effects = configuredEffects.length ? configuredEffects : [EVENT_EFFECTS.includes(settings.effect) ? settings.effect : 'confetti'];
+  const effect = effects[0];
   const eventEnd = new Date(saturdayAtNoon.getTime() + durationMinutes * 60 * 1_000);
   const manualEvent = settings.manualEvent;
   const manualStart = manualEvent ? new Date(manualEvent.startedAt) : null;
@@ -831,6 +1128,8 @@ function weeklyAdminAbuseState(now = new Date(), settings = {}) {
   const weeklyActive = enabled && weekdayIndex === 6 && now >= saturdayAtNoon && now < eventEnd;
   const active = manualActive || weeklyActive;
   const source = manualActive ? 'manual' : weeklyActive ? 'weekly' : null;
+  const activeSeasonalEvents = (Array.isArray(settings.seasonalEvents) ? settings.seasonalEvents : []).filter((item) => Number.isInteger(item.month) && item.month >= 0 && item.month <= 11 && Number.isFinite(Date.parse(item.startedAt)) && Number.isFinite(Date.parse(item.endsAt)) && now >= new Date(item.startedAt) && now < new Date(item.endsAt)).map((item) => ({ id: item.id, month: item.month, startedAt: item.startedAt, endsAt: item.endsAt, music: EVENT_MUSIC.includes(item.music) ? item.music : 'Chasing_The_Spotlight.mp3' }));
+  const manualEffects = manualActive && Array.isArray(manualEvent.effects) ? [...new Set(manualEvent.effects.filter((item) => EVENT_EFFECTS.includes(item)))].slice(0, 5) : [];
   let nextStart = saturdayAtNoon;
   if (weekdayIndex === 6 && now >= saturdayAtNoon) {
     nextStart = mexicoWallTimeToUtc(year, month, day + 7, 12);
@@ -841,7 +1140,10 @@ function weeklyAdminAbuseState(now = new Date(), settings = {}) {
     manualActive,
     source,
     durationMinutes,
-    effect: manualActive && EVENT_EFFECTS.includes(manualEvent.effect) ? manualEvent.effect : effect,
+    effect: manualEffects[0] || (manualActive && EVENT_EFFECTS.includes(manualEvent.effect) ? manualEvent.effect : effect),
+    effects: manualEffects.length ? manualEffects : effects,
+    music: manualActive && EVENT_MUSIC.includes(manualEvent.music) ? manualEvent.music : (EVENT_MUSIC.includes(settings.music) ? settings.music : 'Chasing_The_Spotlight.mp3'),
+    seasonalEvents: activeSeasonalEvents,
     timezone: 'America/Mexico_City',
     startsAt: source === 'manual' ? manualStart.toISOString() : weeklyActive ? saturdayAtNoon.toISOString() : null,
     endsAt: source === 'manual' ? manualEnd.toISOString() : weeklyActive ? eventEnd.toISOString() : null,
@@ -869,8 +1171,8 @@ async function siteSettingsApi(request, response) {
   if (request.method === 'GET') return json(response, 200, await readSiteSettings());
   if (request.method !== 'POST') return json(response, 405, { error: 'Usa GET o POST para cambiar la apariencia.' });
   const user = currentUser(request);
-  if (!user) return json(response, 401, { error: 'Inicia sesión como OWNER para editar FUNVERSE.' });
-  if (user.role !== 'owner') return json(response, 403, { error: 'Solo la cuenta OWNER puede editar la apariencia y los controles parentales.' });
+  if (!user) return json(response, 401, { error: 'Inicia sesión como OWNER o ADMIN para editar FUNVERSE.' });
+  if (!isStaff(user)) return json(response, 403, { error: 'Solo OWNER o ADMIN pueden editar la apariencia y los controles parentales.' });
   let body;
   try { body = await readBody(request); }
   catch (error) { return json(response, error.status || 400, { error: error.message }); }
@@ -919,7 +1221,8 @@ async function statusApi(request, response) {
 async function eventStatusApi(request, response) {
   if (request.method !== 'GET') return json(response, 405, { error: 'Usa GET para consultar los eventos.' });
   const settings = await ensureEventAnnouncement(await readEventSettings());
-  return json(response, 200, { weeklyEvent: weeklyAdminAbuseState(new Date(), settings) });
+  const eventState = weeklyAdminAbuseState(new Date(), settings);
+  return json(response, 200, { weeklyEvent: eventState, seasonalEvents: eventState.seasonalEvents });
 }
 
 async function page(request, response, pathname) {
@@ -927,7 +1230,7 @@ async function page(request, response, pathname) {
   try { name = decodeURIComponent(pathname); }
   catch { response.writeHead(400).end('Ruta no válida.'); return; }
   if (name === '/') name = '/index.html';
-  const allowed = new Set(['/index.html', '/chat.html', '/admin.html', '/style.css', '/script.js', '/chat.js', '/admin.js', '/adminpanelstyle.css']);
+  const allowed = new Set(['/index.html', '/chat.html', '/chat.css', '/admin.html', '/style.css', '/script.js', '/chat.js', '/admin.js', '/adminpanelstyle.css']);
   const asset = name.startsWith('/assets/') && !name.split('/').some((part) => part.startsWith('.'));
   if (!allowed.has(name) && !asset) { response.writeHead(404).end('No encontré esa página.'); return; }
   const filename = path.resolve(root, `.${name}`);
@@ -963,6 +1266,11 @@ async function handleRequest(request, response) {
     if (url.pathname === '/api/events/status') return eventStatusApi(request, response);
     if (url.pathname === '/api/admin/events') return adminEventsApi(request, response);
     if (url.pathname === '/api/admin/users') return adminUsersApi(request, response);
+    if (url.pathname === '/api/admin/reports') return adminReportsApi(request, response);
+    if (url.pathname === '/api/admin/rewards') return adminRewardsApi(request, response);
+    if (url.pathname === '/api/reports') return userReportsApi(request, response);
+    if (url.pathname === '/api/friends') return friendsApi(request, response);
+    if (url.pathname === '/api/chat') return chatApi(request, response, url);
     if (url.pathname.startsWith('/api/auth/')) return authApi(request, response, url.pathname);
     if (url.pathname.startsWith('/api/videos')) return videoApi(request, response, url.pathname);
     return json(response, 404, { error: 'No encontré esa ruta de FUNVERSE.' });

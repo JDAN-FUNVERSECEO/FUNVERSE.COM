@@ -47,15 +47,58 @@ const heroEventClock = document.querySelector('#hero-event-clock');
 const siteShell = document.querySelector('.site-shell');
 let weeklyEventState = null;
 let currentAdminEventEffect = null;
+let eventToastTimer = 0;
+let eventToastSignature = '';
 const eventFxLayer = document.querySelector('#event-fx-layer');
 const ownerLiveStop = document.querySelector('#owner-live-stop');
+const eventMusicPlayer = document.querySelector('#event-music');
+const eventMusicControl = document.querySelector('#event-music-control');
+const eventMusicToggle = document.querySelector('#event-music-toggle');
+const eventMusicTitle = document.querySelector('#event-music-title');
 const eventEffectLabels = Object.freeze({ confetti: 'LLUVIA DE CONFETI', rainbow: 'MUNDO ARCOÍRIS', 'big-head': 'CABEZAS GRANDES', spotlight: 'LUZ DE FIESTA', 'low-gravity': 'GRAVEDAD LUNAR', 'super-speed': 'SUPERVELOCIDAD', giant: 'MODO GIGANTE', mini: 'MODO MINI', meteor: 'LLUVIA DE METEOROS', bouncy: 'MUNDO SALTARÍN', ufo: 'VISITA OVNI', 'pet-parade': 'DESFILE DE MASCOTAS', 'reverse-gravity': 'GRAVEDAD INVERTIDA', 'party-chaos': 'CAOS DE FIESTA', 'points-rain': 'LLUVIA DE PUNTOS' });
+const eventMusicNames = Object.freeze({ 'Chasing_The_Spotlight.mp3': 'Chasing the Spotlight', 'Baneo_Masivo.mp3': 'Baneo Masivo', 'Beyond_The_Door.mp3': 'Beyond the Door', 'Breaking_the_Cage.mp3': 'Breaking the Cage', 'Rewrite_the_Scene.mp3': 'Rewrite the Scene' });
+const eventEffectNames = Object.keys(eventEffectLabels);
 const eventPointsStorageKey = 'funverse-admin-abuse-points-v1';
 const eventPointRewardLimit = 10;
 let eventFxSignature = '';
 let eventPointRainTimer = 0;
 let activeEventRewardId = '';
 let activeEventPointCount = 0;
+let activeSeasonSignature = '';
+
+function syncEventMusic(event) {
+  if (!eventMusicPlayer || !eventMusicControl) return;
+  const seasons = Array.isArray(event.seasonalEvents) ? event.seasonalEvents : [];
+  const latestSeason = [...seasons].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)).at(-1);
+  const music = event.active ? event.music : latestSeason?.music;
+  if (!music || !Object.hasOwn(eventMusicNames, music)) {
+    eventMusicPlayer.pause();
+    eventMusicControl.hidden = true;
+    eventMusicPlayer.removeAttribute('src');
+    eventMusicPlayer.load();
+    return;
+  }
+  const source = `/assets/music/${music}`;
+  if (eventMusicPlayer.getAttribute('src') !== source) {
+    eventMusicPlayer.src = source;
+    eventMusicPlayer.load();
+  }
+  eventMusicControl.hidden = false;
+  eventMusicTitle.textContent = eventMusicNames[music];
+  eventMusicToggle.textContent = eventMusicPlayer.paused ? '▶ Escuchar' : 'Ⅱ Pausar';
+  eventMusicToggle.setAttribute('aria-label', eventMusicPlayer.paused ? `Reproducir ${eventMusicNames[music]}` : 'Pausar música del evento');
+}
+
+eventMusicToggle?.addEventListener('click', async () => {
+  if (!eventMusicPlayer) return;
+  if (eventMusicPlayer.paused) {
+    try { await eventMusicPlayer.play(); }
+    catch { eventMusicTitle.textContent = 'No se pudo reproducir; vuelve a intentarlo'; }
+  } else eventMusicPlayer.pause();
+  syncEventMusic(weeklyEventState || {});
+});
+eventMusicPlayer?.addEventListener('play', () => { if (eventMusicToggle) eventMusicToggle.textContent = 'Ⅱ Pausar'; });
+eventMusicPlayer?.addEventListener('pause', () => { if (eventMusicToggle) eventMusicToggle.textContent = '▶ Escuchar'; });
 
 function readEventPointCount(eventId) {
   try {
@@ -106,15 +149,18 @@ function syncAdminAbuseFx(event) {
   }
   eventFxLayer.hidden = false;
   const eventId = `${event.source || 'weekly'}:${event.startsAt || event.endsAt || 'active'}`
-  const signature = `${eventId}:${event.effect || 'confetti'}`
+  const effects = Array.isArray(event.effects) ? [...new Set(event.effects.filter((effect) => eventEffectNames.includes(effect)))].slice(0, 5) : [];
+  if (!effects.length) effects.push(event.effect || 'confetti');
+  const signature = `${eventId}:${effects.join(',')}`;
   if (signature === eventFxSignature) return;
   if (eventPointRainTimer) window.clearInterval(eventPointRainTimer);
   eventFxSignature = signature;
   activeEventRewardId = eventId;
   activeEventPointCount = readEventPointCount(eventId);
-  eventFxLayer.dataset.effect = event.effect || 'confetti';
+  eventFxLayer.dataset.effect = effects[0];
+  eventFxLayer.dataset.effects = effects.join(' ');
   eventFxLayer.replaceChildren();
-  for (let index = 0; index < 22; index += 1) {
+  for (let index = 0; index < 14; index += 1) {
     const spark = document.createElement('span');
     spark.className = 'event-fx-spark';
     spark.style.setProperty('--fx-left', `${Math.random() * 100}%`);
@@ -157,16 +203,33 @@ function updateWeeklyEventClock() {
 function renderWeeklyEvent(event) {
   if (!event || typeof event.active !== 'boolean' || !event.nextAt) return;
   weeklyEventState = event;
-  currentAdminEventEffect = event.active ? event.effect : null;
+  const effects = Array.isArray(event.effects) ? [...new Set(event.effects.filter((effect) => eventEffectNames.includes(effect)))].slice(0, 5) : [event.effect].filter((effect) => eventEffectNames.includes(effect));
+  currentAdminEventEffect = event.active ? (effects[0] || event.effect) : null;
   siteShell?.classList.toggle('weekly-event-active', event.active);
-  ['confetti', 'rainbow', 'big-head', 'spotlight', 'low-gravity', 'super-speed', 'giant', 'mini', 'meteor', 'bouncy', 'ufo', 'pet-parade', 'reverse-gravity', 'party-chaos', 'points-rain'].forEach((effect) => siteShell?.classList.toggle(`event-effect-${effect}`, event.active && event.effect === effect));
+  eventEffectNames.forEach((effect) => siteShell?.classList.toggle(`event-effect-${effect}`, event.active && effects.includes(effect)));
   syncAdminAbuseFx(event);
+  renderActiveSeasonalEvents(event.seasonalEvents);
+  syncEventMusic(event);
   const liveToast = document.querySelector('#event-live-toast');
   if (liveToast) {
-    liveToast.hidden = !event.active;
+    const signature = event.active ? `${event.source || 'weekly'}:${event.startsAt || event.endsAt || 'active'}` : '';
+    if (!event.active) {
+      if (eventToastTimer) window.clearTimeout(eventToastTimer);
+      eventToastTimer = 0;
+      eventToastSignature = '';
+      liveToast.hidden = true;
+    } else if (signature !== eventToastSignature) {
+      if (eventToastTimer) window.clearTimeout(eventToastTimer);
+      eventToastSignature = signature;
+      liveToast.hidden = false;
+      eventToastTimer = window.setTimeout(() => {
+        liveToast.hidden = true;
+        eventToastTimer = 0;
+      }, 10_000);
+    }
     const liveText = document.querySelector('#event-live-text');
-    if (liveText) liveText.textContent = `ADMIN ABUSE EN VIVO · ${eventEffectLabels[event.effect] || 'FIESTA'}`;
-    if (ownerLiveStop) ownerLiveStop.hidden = !event.active || event.source !== 'manual' || authState.role !== 'owner';
+    if (liveText) liveText.textContent = `ADMIN ABUSE EN VIVO · ${effects.map((effect) => eventEffectLabels[effect]).join(' + ') || 'FIESTA'}`;
+    if (ownerLiveStop) ownerLiveStop.hidden = !event.active || event.source !== 'manual' || !['owner', 'admin'].includes(authState.role);
   }
   if (event.enabled === false && !event.manualActive) {
     if (heroEventStatus) heroEventStatus.textContent = 'Horario semanal pausado · el owner puede iniciarlo';
@@ -220,7 +283,7 @@ function fallbackWeeklyEvent(now = new Date()) {
     : start;
   return {
     active, enabled: true, manualActive: false, source: active ? 'weekly' : null,
-    durationMinutes: 60, effect: 'confetti', timezone: 'America/Mexico_City',
+    durationMinutes: 60, effect: 'confetti', effects: ['confetti'], music: 'Chasing_The_Spotlight.mp3', seasonalEvents: [], timezone: 'America/Mexico_City',
     startsAt: active ? start.toISOString() : null,
     endsAt: active ? end.toISOString() : null,
     nextAt: next.toISOString(),
@@ -230,7 +293,7 @@ function fallbackWeeklyEvent(now = new Date()) {
 async function refreshWeeklyEvent() {
   try {
     const data = await apiJson('/api/events/status');
-    if (data.weeklyEvent) renderWeeklyEvent(data.weeklyEvent);
+    if (data.weeklyEvent) renderWeeklyEvent({ ...data.weeklyEvent, seasonalEvents: data.seasonalEvents || data.weeklyEvent.seasonalEvents || [] });
   } catch {
     if (!weeklyEventState) renderWeeklyEvent(fallbackWeeklyEvent());
   }
@@ -250,6 +313,43 @@ const seasonEvents = [
   { name: 'Día de Muertos', theme: 'muertos', art: '💀', decor: ['💀', '🌼'], questIcon: '🌼', questTitle: 'Enciende las flores de recuerdo', questText: 'Reúne cinco flores para iluminar el camino de la memoria.', description: 'Una temporada colorida para conocer y recordar con cariño una tradición mexicana.', game: 'Jugar el reto de recuerdo', href: '#seasonal-quest' },
   { name: 'Navidad cósmica', theme: 'christmas', art: '🎄', decor: ['🎄', '🤖🎅'], questIcon: '🎁', questTitle: 'Ayuda al robot Santa', questText: 'Recoge cinco regalos antes de que el trineo despegue.', description: 'Un árbol galáctico y el robot con su traje de Santa llenan la estación de luces.', game: 'Jugar el reto navideño', href: '#seasonal-quest' },
 ];;
+
+function renderActiveSeasonalEvents(events = []) {
+  const container = document.querySelector('#season-active-events');
+  if (!container) return;
+  const active = (Array.isArray(events) ? events : []).filter((item) => Number.isInteger(item.month) && item.month >= 0 && item.month < seasonEvents.length && Number.isFinite(Date.parse(item.endsAt)));
+  container.replaceChildren();
+  container.hidden = active.length === 0;
+  if (!active.length) {
+    const hadActiveEvent = Boolean(activeSeasonSignature);
+    activeSeasonSignature = '';
+    if (hadActiveEvent) {
+      const actualMonth = Number(new Intl.DateTimeFormat('en', { timeZone: 'America/Mexico_City', month: 'numeric' }).format(new Date())) - 1;
+      const restoredMonth = siteSettingsState.seasonMonth === 'auto' ? actualMonth : Number(siteSettingsState.seasonMonth);
+      renderSeason(restoredMonth, true);
+    }
+    return;
+  }
+  const label = document.createElement('b');
+  label.textContent = active.length === 1 ? 'Evento de temporada activo' : `${active.length} eventos de temporada activos`;
+  container.append(label);
+  const badges = document.createElement('div');
+  badges.className = 'season-active-badges';
+  for (const event of active) {
+    const badge = document.createElement('span');
+    badge.className = 'season-active-badge';
+    const item = seasonEvents[event.month];
+    badge.textContent = `${item.art} ${item.name} · hasta ${new Date(event.endsAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`;
+    badges.append(badge);
+  }
+  container.append(badges);
+  const signature = active.map((item) => item.id || `${item.month}:${item.startedAt}`).join('|');
+  if (signature !== activeSeasonSignature) {
+    activeSeasonSignature = signature;
+    const latest = active.at(-1);
+    renderSeason(latest.month, true);
+  }
+}
 
 let currentSeasonMonth = 0;
 let siteSettingsState = { seasonMonth: 'auto', heroTitle: 'El universo de diversión empieza aquí.', heroTagline: 'Juega, crea y explora a tu manera. Tu siguiente aventura está a un clic.', parentalEnabled: false, dailyLimitMinutes: 60 };
@@ -386,9 +486,9 @@ function progressNumber(value) {
   return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
 }
 
-function loadPlayerProgress() {
+function loadPlayerProgress(storageKey = progressStorageKey) {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(progressStorageKey) || '{}') || {}; } catch {}
+  try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch {}
   const stats = saved.stats && typeof saved.stats === 'object' ? saved.stats : {};
   const today = mexicoDateKey();
   const savedDaily = saved.daily && saved.daily.date === today ? saved.daily : {};
@@ -400,13 +500,76 @@ function loadPlayerProgress() {
   };
 }
 
-const playerProgress = loadPlayerProgress();
+let playerProgress = loadPlayerProgress();
 const passportNotice = document.querySelector('#passport-notice');
 let passportOwner = false;
+let progressSyncTimer = 0;
+let lastServerXp = null;
+
+function accountProgressStorageKey(email) { return `${progressStorageKey}:${encodeURIComponent(email)}`; }
+
+async function syncAccountProgress(email) {
+  if (!email) return;
+  const storageKey = accountProgressStorageKey(email);
+  try {
+    if (localStorage.getItem(storageKey)) playerProgress = loadPlayerProgress(storageKey);
+    else {
+      const firstAccountKey = `${progressStorageKey}:first-account`;
+      const firstAccount = localStorage.getItem(firstAccountKey);
+      const localProgress = localStorage.getItem(progressStorageKey);
+      if (!firstAccount && localProgress) {
+        localStorage.setItem(storageKey, localProgress);
+        localStorage.setItem(firstAccountKey, email);
+        playerProgress = loadPlayerProgress(storageKey);
+      } else playerProgress = loadPlayerProgress(storageKey);
+    }
+  } catch { playerProgress = loadPlayerProgress(storageKey); }
+  try {
+    const serverProgress = await apiJson('/api/auth/progress');
+    if (serverProgress.initialized) playerProgress.xp = progressNumber(serverProgress.xp);
+    else {
+      const saved = await apiJson('/api/auth/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ xp: playerProgress.xp }) });
+      playerProgress.xp = progressNumber(saved.xp);
+    }
+    lastServerXp = playerProgress.xp;
+    try { localStorage.setItem(storageKey, JSON.stringify(playerProgress)); } catch {}
+  } catch { /* El pasaporte local sigue funcionando si el servidor se desconecta. */ }
+  updatePassport();
+}
+
+async function refreshAccountProgress() {
+  if (!authState?.signedIn || !authState.email) return;
+  try {
+    const remote = await apiJson('/api/auth/progress');
+    const remoteXp = progressNumber(remote.xp);
+    if (lastServerXp === null) { lastServerXp = remoteXp; return; }
+    if (remoteXp === lastServerXp) return;
+    if (remoteXp < lastServerXp) playerProgress.xp = remoteXp;
+    else playerProgress.xp = progressNumber(remoteXp + Math.max(0, playerProgress.xp - lastServerXp));
+    lastServerXp = remoteXp;
+    try { localStorage.setItem(accountProgressStorageKey(authState.email), JSON.stringify(playerProgress)); } catch {}
+    updatePassport();
+  } catch { /* El pasaporte conserva su última copia local si el servidor se desconecta. */ }
+}
 
 function savePlayerProgress() {
-  try { localStorage.setItem(progressStorageKey, JSON.stringify(playerProgress)); } catch {
+  const key = authState?.signedIn && authState.email ? accountProgressStorageKey(authState.email) : progressStorageKey;
+  try { localStorage.setItem(key, JSON.stringify(playerProgress)); } catch {
     if (passportNotice) passportNotice.textContent = 'El navegador no pudo guardar tu progreso. Revisa el espacio disponible.';
+  }
+  if (authState?.signedIn) {
+    if (progressSyncTimer) window.clearTimeout(progressSyncTimer);
+    progressSyncTimer = window.setTimeout(async () => {
+      try {
+        const saved = await apiJson('/api/auth/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ xp: playerProgress.xp }) });
+        lastServerXp = progressNumber(saved.xp);
+        if (progressNumber(saved.xp) !== playerProgress.xp) {
+          playerProgress.xp = progressNumber(saved.xp);
+          try { localStorage.setItem(accountProgressStorageKey(authState.email), JSON.stringify(playerProgress)); } catch {}
+          updatePassport();
+        }
+      } catch { /* La progresión se sincroniza al volver a conectar. */ }
+    }, 650);
   }
 }
 
@@ -1315,6 +1478,7 @@ const videoInput = document.querySelector('#video-file');
 const uploadStatus = document.querySelector('#upload-status');
 const videoGrid = document.querySelector('#video-grid');
 let authState = { setupRequired: false, signedIn: false, email: null, role: null, emailNotificationsReady: false };
+const isStaffRole = (role) => role === 'owner' || role === 'admin';
 let authMode = 'login';
 let ownerManualEventActive = false;
 
@@ -1350,21 +1514,21 @@ function showAccountPanel(message = '') {
       ? authState.role === 'owner' ? 'Tu cuenta propietaria está activa.' : 'Tu cuenta personal está activa en esta computadora.'
       : authMode === 'register' ? 'Crea una cuenta personal de FUNVERSE.' : 'Inicia sesión o crea tu cuenta personal.';
   ownerEmail.textContent = authState.email || '';
-  accountRole.textContent = authState.role === 'owner' ? 'OWNER · ÚNICO' : authState.role === 'parent' ? 'ADULTO RESPONSABLE' : 'CUENTA PERSONAL';
+  accountRole.textContent = authState.role === 'owner' ? 'OWNER · ÚNICO' : authState.role === 'admin' ? 'ADMINISTRADOR' : authState.role === 'parent' ? 'ADULTO RESPONSABLE' : 'CUENTA PERSONAL';
   passportOwner = authState.role === 'owner';
   updatePassport();
   profileNameInput.value = authState.displayName || (authState.email || '').split('@')[0];
   profileAvatarPreview.src = authState.avatar || '/assets/funverse-astronaut.svg';
   if (profileStatus) profileStatus.textContent = authState.avatar ? 'Foto de perfil guardada en esta instalación.' : 'Foto PNG, JPG o WebP de hasta 256 KB.';
   mailSetupNote.hidden = authState.role !== 'owner' || authState.emailNotificationsReady;
-  ownerEventTools.hidden = authState.role !== 'owner';
+  ownerEventTools.hidden = !isStaffRole(authState.role);
   accountButton.textContent = authState.signedIn ? (authState.displayName || 'Mi cuenta') : authState.setupRequired ? 'Configurar' : 'Entrar';
   accountButton.querySelector('.account-avatar-thumb')?.remove();
   if (authState.signedIn && authState.avatar) { const avatar = document.createElement('img'); avatar.className = 'account-avatar-thumb'; avatar.src = authState.avatar; avatar.alt = ''; accountButton.prepend(avatar); }
-  videoAdmin.hidden = authState.role !== 'owner';
-  if (ownerAdminLink) ownerAdminLink.hidden = authState.role !== 'owner';
+  videoAdmin.hidden = !isStaffRole(authState.role);
+  if (ownerAdminLink) ownerAdminLink.hidden = !isStaffRole(authState.role);
   if (twoFactorPanel) twoFactorPanel.hidden = !authState.signedIn;
-  if (ownerLiveStop) ownerLiveStop.hidden = authState.role !== 'owner' || !weeklyEventState?.manualActive;
+  if (ownerLiveStop) ownerLiveStop.hidden = !isStaffRole(authState.role) || !weeklyEventState?.manualActive;
   accountMessage.textContent = message;
 }
 
@@ -1374,7 +1538,8 @@ async function refreshAuth() {
     authState = data;
     showAccountPanel();
     renderVideos();
-    if (authState.role === 'owner') void refreshOwnerEventSettings();
+    if (authState.signedIn) void syncAccountProgress(authState.email);
+    if (isStaffRole(authState.role)) void refreshOwnerEventSettings();
     if (authState.signedIn) void refreshTwoFactorSettings();
   } catch {
     accountButton.textContent = 'Entrar';
@@ -1384,7 +1549,7 @@ async function refreshAuth() {
 }
 
 async function refreshOwnerEventSettings() {
-  if (authState.role !== 'owner') return;
+  if (!isStaffRole(authState.role)) return;
   try {
     const settings = await apiJson('/api/admin/events');
     updateOwnerEventPanel(settings);
@@ -1535,13 +1700,14 @@ async function submitAccountForm(event, endpoint) {
       return;
     }
     authState = { ...authState, ...data, setupRequired: false, signedIn: true };
+    await syncAccountProgress(authState.email);
     form.reset();
     const codeRow = document.querySelector('#login-otp-row');
     if (codeRow) codeRow.hidden = true;
     const codeInput = document.querySelector('#login-otp');
     if (codeInput) codeInput.required = false;
-    if (authState.role === 'owner') await refreshOwnerEventSettings();
-    showAccountPanel(authState.role === 'owner' ? '¡Listo! Ya puedes administrar FUNVERSE.' : authState.role === 'parent' ? '¡Listo! Tu cuenta de adulto responsable ya está creada.' : '¡Listo! Tu cuenta personal ya está creada.');
+    if (isStaffRole(authState.role)) await refreshOwnerEventSettings();
+    showAccountPanel(authState.role === 'owner' ? '¡Listo! Ya puedes administrar FUNVERSE como OWNER.' : authState.role === 'admin' ? '¡Listo! Ya puedes administrar FUNVERSE como ADMIN.' : authState.role === 'parent' ? '¡Listo! Tu cuenta de adulto responsable ya está creada.' : '¡Listo! Tu cuenta personal ya está creada.');
     void refreshTwoFactorSettings();
     await refreshVideos();
     accountDialog.close();
@@ -1782,3 +1948,4 @@ void refreshAuth();
 void refreshVideos();
 void refreshWeeklyEvent();
 window.setInterval(refreshWeeklyEvent, 15_000);
+window.setInterval(refreshAccountProgress, 15_000);
