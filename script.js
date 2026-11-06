@@ -501,6 +501,9 @@ function loadPlayerProgress(storageKey = progressStorageKey) {
 }
 
 let playerProgress = loadPlayerProgress();
+// Declared before the first savePlayerProgress() call so startup never hits the
+// temporal dead zone while the account section is initialized later in file.
+let authState = { setupRequired: false, signedIn: false, email: null, role: null, emailNotificationsReady: false };
 const passportNotice = document.querySelector('#passport-notice');
 let passportOwner = false;
 let progressSyncTimer = 0;
@@ -1477,7 +1480,6 @@ const videoAdmin = document.querySelector('#video-admin');
 const videoInput = document.querySelector('#video-file');
 const uploadStatus = document.querySelector('#upload-status');
 const videoGrid = document.querySelector('#video-grid');
-let authState = { setupRequired: false, signedIn: false, email: null, role: null, emailNotificationsReady: false };
 const isStaffRole = (role) => role === 'owner' || role === 'admin';
 let authMode = 'login';
 let ownerManualEventActive = false;
