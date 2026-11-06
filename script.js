@@ -188,6 +188,54 @@ function renderWeeklyEvent(event) {
   updateWeeklyEventClock();
 }
 
+function mexicoWallTimeToUtc(year, month, day, hour) {
+  const wanted = Date.UTC(year, month - 1, day, hour);
+  let candidate = wanted;
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(candidate)).map((part) => [part.type, part.value]));
+    const observed = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+    candidate += wanted - observed;
+  }
+  return new Date(candidate);
+}
+
+function fallbackWeeklyEvent(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const day = Number(parts.day);
+  const dayOffset = (6 - weekday + 7) % 7;
+  const start = mexicoWallTimeToUtc(year, month, day + dayOffset, 12);
+  const end = new Date(start.getTime() + 60 * 60 * 1_000);
+  const active = weekday === 6 && now >= start && now < end;
+  const next = weekday === 6 && now >= start
+    ? mexicoWallTimeToUtc(year, month, day + 7, 12)
+    : start;
+  return {
+    active, enabled: true, manualActive: false, source: active ? 'weekly' : null,
+    durationMinutes: 60, effect: 'confetti', timezone: 'America/Mexico_City',
+    startsAt: active ? start.toISOString() : null,
+    endsAt: active ? end.toISOString() : null,
+    nextAt: next.toISOString(),
+  };
+}
+
+async function refreshWeeklyEvent() {
+  try {
+    const data = await apiJson('/api/events/status');
+    if (data.weeklyEvent) renderWeeklyEvent(data.weeklyEvent);
+  } catch {
+    if (!weeklyEventState) renderWeeklyEvent(fallbackWeeklyEvent());
+  }
+}
+
 const seasonEvents = [
   { name: 'Día de Reyes Galáctico', theme: 'reyes', art: '👑', decor: ['👑', '🎁'], questIcon: '👑', questTitle: 'Entrega los regalos estelares', questText: 'Encuentra cinco regalos escondidos en el reino de los Reyes.', description: 'Sigue las estrellas, comparte regalos y comienza el año con una aventura.', game: 'Jugar el reto de Reyes', href: '#seasonal-quest' },
   { name: 'Festival de corazones', theme: 'hearts', art: '💝', decor: ['💗', '💝'], questIcon: '💝', questTitle: 'Reúne corazones brillantes', questText: 'Recoge cinco corazones para completar el festival.', description: 'Una celebración de amistad, amabilidad y aventuras en equipo.', game: 'Jugar el reto de corazones', href: '#seasonal-quest' },
@@ -1732,3 +1780,5 @@ videoInput.addEventListener('change', async () => {
 
 void refreshAuth();
 void refreshVideos();
+void refreshWeeklyEvent();
+window.setInterval(refreshWeeklyEvent, 15_000);
